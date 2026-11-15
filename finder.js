@@ -1,0 +1,2 @@
+// Therapeuten-Finder
+// Main JavaScript
