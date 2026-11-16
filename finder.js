@@ -596,6 +596,13 @@ document.addEventListener("DOMContentLoaded", function () {
   // Additional geographic filter for Finsweet
   function geoFilter(items) {
 
+     // Share candidates before applying the radius.
+    document.dispatchEvent(
+    new CustomEvent("finder:geo-candidates", {
+      detail: { items: [...items] }
+      })
+     );
+
     // No location selected
     if (!appliedLocation) return items;
 
