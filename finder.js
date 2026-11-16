@@ -2355,3 +2355,747 @@ document.addEventListener("DOMContentLoaded", function () {
   ]);
 
 })();
+
+
+/* ==========================================================================
+   15. FINDER VIEW TOGGLE — GRID / LIST
+   ========================================================================== */
+(() => {
+  "use strict";
+
+  const gridButton = document.querySelector(".view-toggle-grid__btn");
+  const listButton = document.querySelector(".view-toggle-list__btn");
+  const resultsGrid = document.querySelector(".results-list__grid");
+
+  if (!gridButton || !listButton || !resultsGrid) {
+    console.warn("Finder View Toggle: elements not found");
+    return;
+  }
+
+  if (resultsGrid.dataset.viewToggleReady === "true") return;
+  resultsGrid.dataset.viewToggleReady = "true";
+
+  function setView(view) {
+    const isList = view === "list";
+
+    resultsGrid.classList.toggle("is--list", isList);
+    gridButton.classList.toggle("is--active", !isList);
+    listButton.classList.toggle("is--active", isList);
+
+    gridButton.setAttribute("aria-pressed", String(!isList));
+    listButton.setAttribute("aria-pressed", String(isList));
+  }
+
+  gridButton.addEventListener("click", event => {
+    event.preventDefault();
+    setView("grid");
+  });
+
+  listButton.addEventListener("click", event => {
+    event.preventDefault();
+    setView("list");
+  });
+
+  setView("grid");
+
+  console.log("Finder View Toggle: ready");
+})();
+
+
+
+/* ==========================================================================
+   16. FINDER MAP — INITIALIZATION
+   ========================================================================== */
+(() => {
+  "use strict";
+
+  const container = document.getElementById("finder-map");
+
+  if (!container) {
+    console.warn("Finder Map: container not found");
+    return;
+  }
+
+  if (typeof mapboxgl === "undefined") {
+    console.warn("Finder Map: Mapbox GL JS not loaded");
+    return;
+  }
+
+  // Public Mapbox token
+  mapboxgl.accessToken = "pk.eyJ1IjoiZHJrYXJsYWNhZGVteSIsImEiOiJjbXc0c2VlcXcwMHFjMnpxdnU5djd1Mnp2In0.WAfodmJtJlMVoSn7AerCQg";
+
+  const map = new mapboxgl.Map({
+    container: "finder-map",
+    style: "mapbox://styles/mapbox/streets-v12",
+    center: [10.4515, 51.1657],
+    zoom: 5.5,
+    attributionControl: false
+  });
+
+  map.addControl(
+    new mapboxgl.AttributionControl({
+      compact: true
+    }),
+    "bottom-right"
+  );
+
+  map.addControl(
+    new mapboxgl.NavigationControl({
+      showCompass: false
+    }),
+    "top-right"
+  );
+
+  map.on("load", () => {
+    console.log("Finder Map: ready");
+  });
+
+  map.on("error", event => {
+    console.error("Finder Map: error", event.error);
+  });
+
+  window.finderMap = {
+    getMap() {
+      return map;
+    }
+  };
+})();
+
+
+
+/* ==========================================================================
+   17. FINDER MAP — PRACTITIONER MARKERS
+   Finsweet v2: after filtering, before pagination
+   ========================================================================== */
+(() => {
+  "use strict";
+
+  const MARKER_COLOR = "#737969";
+
+  let map = null;
+  let markers = [];
+  let latestItems = null;
+  let updateTimer = null;
+  let lastSignature = null;
+
+  // -----------------------------------------
+  // READ PRACTITIONER DATA
+  // -----------------------------------------
+
+  function getPractitioner(item) {
+    const root = item?.element;
+    if (!root) return null;
+
+    const element = root.matches('[data-practitioner="true"]')
+      ? root
+      : root.querySelector('[data-practitioner="true"]');
+
+    if (!element) return null;
+
+    const latValue = element.getAttribute("data-lat");
+    const lngValue = element.getAttribute("data-lng");
+
+    if (!latValue?.trim() || !lngValue?.trim()) {
+      return null;
+    }
+
+    const lat = Number(latValue);
+    const lng = Number(lngValue);
+
+    if (
+      !Number.isFinite(lat) ||
+      !Number.isFinite(lng) ||
+      lat < -90 ||
+      lat > 90 ||
+      lng < -180 ||
+      lng > 180
+    ) {
+      return null;
+    }
+
+    return {
+      id: item.id || "",
+      name: element.getAttribute("data-name") || "",
+      lat,
+      lng
+    };
+  }
+
+  // -----------------------------------------
+  // CLEAR MARKERS
+  // -----------------------------------------
+
+  function clearMarkers() {
+    markers.forEach(marker => marker.remove());
+    markers = [];
+  }
+
+  // -----------------------------------------
+  // RENDER MARKERS
+  // -----------------------------------------
+
+  function renderMarkers(items) {
+    if (!map || !Array.isArray(items)) return;
+
+    const practitioners = [];
+    const seen = new Set();
+
+    items.forEach(item => {
+      const practitioner = getPractitioner(item);
+      if (!practitioner) return;
+
+      const key = practitioner.id || [
+        practitioner.name,
+        practitioner.lat,
+        practitioner.lng
+      ].join("|");
+
+      if (seen.has(key)) return;
+
+      seen.add(key);
+      practitioners.push(practitioner);
+    });
+
+    // Ignore sorting-only changes.
+    const signature = practitioners
+      .map(p => [
+        p.id,
+        p.name,
+        p.lat,
+        p.lng
+      ].join("|"))
+      .sort()
+      .join("||");
+
+    if (signature === lastSignature) return;
+
+    lastSignature = signature;
+
+    clearMarkers();
+
+    const bounds = new mapboxgl.LngLatBounds();
+
+    practitioners.forEach(practitioner => {
+      const marker = new mapboxgl.Marker({
+        color: MARKER_COLOR
+      })
+        .setLngLat([
+          practitioner.lng,
+          practitioner.lat
+        ])
+        .addTo(map);
+
+      markers.push(marker);
+
+      bounds.extend([
+        practitioner.lng,
+        practitioner.lat
+      ]);
+    });
+
+    if (practitioners.length > 0) {
+      map.fitBounds(bounds, {
+        padding: 60,
+        maxZoom: 11,
+        duration: 500
+      });
+    }
+
+    console.log(
+      "Finder Map: markers updated:",
+      practitioners.length
+    );
+  }
+
+  // -----------------------------------------
+  // SCHEDULE UPDATE
+  // -----------------------------------------
+
+  function scheduleUpdate(items) {
+    latestItems = [...items];
+
+    clearTimeout(updateTimer);
+
+    updateTimer = setTimeout(() => {
+      renderMarkers(latestItems);
+    }, 80);
+  }
+
+  // -----------------------------------------
+  // MAP CONNECTION
+  // -----------------------------------------
+
+  function initMap() {
+    map = window.finderMap?.getMap();
+
+    if (!map) {
+      console.warn("Finder Map: Mapbox instance not found");
+      return;
+    }
+
+    if (map.loaded()) {
+      if (latestItems) {
+        renderMarkers(latestItems);
+      }
+    } else {
+      map.once("load", () => {
+        if (latestItems) {
+          renderMarkers(latestItems);
+        }
+      });
+    }
+  }
+
+  // -----------------------------------------
+  // FINSWEET V2
+  // -----------------------------------------
+
+  (window.FinsweetAttributes ||= []).push([
+    "list",
+    ([list]) => {
+      if (!list) {
+        console.warn("Finder Map: Finsweet list not found");
+        return;
+      }
+
+      initMap();
+
+      list.addHook("sort", items => {
+        console.log(
+          "MAP DEBUG — filtered items:",
+          items.length
+        );
+
+        scheduleUpdate(items);
+        return items;
+      });
+
+      list.triggerHook("filter");
+
+      console.log("Finder Map: Finsweet sync ready");
+    }
+  ]);
+})();
+
+
+
+
+/* ==========================================================================
+   18. FINDER EMPTY STATE
+   Smart radius suggestions for zero results
+   Only radii with increasing practitioner counts
+   ========================================================================== */
+(() => {
+  "use strict";
+
+  const root = document.querySelector(".finder-empty");
+  if (!root) return;
+
+  const title = root.querySelector(".finder-empty__title");
+  const description = root.querySelector(".finder-empty__description");
+  const radiusContainer = root.querySelector(".finder-empty__radius");
+  const applyButton = root.querySelector(".finder-empty__apply");
+  const resetButton = root.querySelector(".finder-empty__reset");
+
+  if (
+    !title ||
+    !description ||
+    !radiusContainer ||
+    !applyButton ||
+    !resetButton
+  ) {
+    console.warn("Finder Empty: missing elements");
+    return;
+  }
+
+  const RADII = [10, 25, 50, 100, 200, Infinity];
+
+  let candidates = [];
+  let selectedRadius = null;
+  let updateTimer = null;
+
+  // -----------------------------------------
+  // DISTANCE CALCULATION
+  // -----------------------------------------
+
+  function distanceKm(lat1, lng1, lat2, lng2) {
+    const rad = value => value * Math.PI / 180;
+
+    const dLat = rad(lat2 - lat1);
+    const dLng = rad(lng2 - lng1);
+
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(rad(lat1)) *
+      Math.cos(rad(lat2)) *
+      Math.sin(dLng / 2) ** 2;
+
+    return 6371 * 2 * Math.asin(
+      Math.sqrt(Math.min(1, a))
+    );
+  }
+
+  // -----------------------------------------
+  // GET PRACTITIONER COORDINATES
+  // -----------------------------------------
+
+  function getCoordinates(item) {
+    const rootElement = item?.element;
+    if (!rootElement) return null;
+
+    const element = rootElement.matches('[data-practitioner="true"]')
+      ? rootElement
+      : rootElement.querySelector('[data-practitioner="true"]');
+
+    if (!element) return null;
+
+    const latValue = element.getAttribute("data-lat");
+    const lngValue = element.getAttribute("data-lng");
+
+    if (!latValue?.trim() || !lngValue?.trim()) {
+      return null;
+    }
+
+    const lat = Number(latValue);
+    const lng = Number(lngValue);
+
+    if (
+      !Number.isFinite(lat) ||
+      !Number.isFinite(lng) ||
+      lat < -90 ||
+      lat > 90 ||
+      lng < -180 ||
+      lng > 180
+    ) {
+      return null;
+    }
+
+    return { lat, lng };
+  }
+
+  // -----------------------------------------
+  // ADVANCED FILTER MATCHING
+  // -----------------------------------------
+
+  function hasMatch(element, attribute, values) {
+    if (!values.length) return true;
+
+    const available = new Set(
+      [...element.querySelectorAll(`[${attribute}]`)]
+        .map(node => node.getAttribute(attribute))
+    );
+
+    return values.some(value => available.has(value));
+  }
+
+  function matchesAdvanced(item) {
+    const applied = window.finderAdvanced?.getApplied();
+
+    if (!applied) return true;
+
+    const element = item.element;
+    if (!element) return false;
+
+    return (
+      hasMatch(
+        element,
+        "data-option",
+        applied.consultation || []
+      ) &&
+      hasMatch(
+        element,
+        "data-option",
+        applied.insurance || []
+      ) &&
+      hasMatch(
+        element,
+        "data-option",
+        applied.ages || []
+      ) &&
+      hasMatch(
+        element,
+        "data-language",
+        applied.languages || []
+      ) &&
+      hasMatch(
+        element,
+        "data-specialization",
+        applied.specializations || []
+      )
+    );
+  }
+
+  // -----------------------------------------
+  // VISIBILITY
+  // -----------------------------------------
+
+  function show() {
+    root.style.display = "flex";
+    root.setAttribute("aria-hidden", "false");
+  }
+
+  function hide() {
+    if (root.contains(document.activeElement)) {
+      document.activeElement.blur();
+    }
+
+    root.style.display = "none";
+    root.setAttribute("aria-hidden", "true");
+  }
+
+  function hideRadiusOptions() {
+    radiusContainer.style.display = "none";
+    applyButton.style.display = "none";
+    selectedRadius = null;
+  }
+
+  // -----------------------------------------
+  // GET AVAILABLE RADII
+  // -----------------------------------------
+
+  function getRadiusOptions(items, location, currentRadius) {
+    const distances = items
+      .map(item => getCoordinates(item))
+      .filter(Boolean)
+      .map(coords => distanceKm(
+        location.lat,
+        location.lng,
+        coords.lat,
+        coords.lng
+      ));
+
+    const options = RADII
+      .filter(radius => radius > currentRadius)
+      .map(radius => ({
+        radius,
+        count: distances.filter(distance =>
+          distance <= radius
+        ).length
+      }))
+      .filter(option => option.count > 0);
+
+    // Keep only radii that add new practitioners.
+    let previousCount = 0;
+
+    return options.filter(option => {
+      if (option.count <= previousCount) {
+        return false;
+      }
+
+      previousCount = option.count;
+      return true;
+    });
+  }
+
+  // -----------------------------------------
+  // RENDER RADIUS OPTIONS
+  // -----------------------------------------
+
+  function renderRadiusOptions(options) {
+    radiusContainer.replaceChildren();
+
+    selectedRadius = options[0]?.radius ?? null;
+
+    options.forEach(option => {
+      const label = document.createElement("label");
+      label.className = "finder-empty__radius-option";
+
+      const input = document.createElement("input");
+      input.type = "radio";
+      input.name = "finder-empty-radius";
+
+      input.value = option.radius === Infinity
+        ? "all"
+        : String(option.radius);
+
+      input.checked = option.radius === selectedRadius;
+
+      const text = document.createElement("span");
+      text.className = "finder-empty__radius-label";
+
+      const radiusText = option.radius === Infinity
+        ? "Überall"
+        : `${option.radius} km`;
+
+      const practitionerText = option.count === 1
+        ? "Therapeut:in"
+        : "Therapeut:innen";
+
+      text.textContent =
+        `${radiusText} · ${option.count} ${practitionerText}`;
+
+      label.append(input, text);
+      radiusContainer.appendChild(label);
+
+      input.addEventListener("change", () => {
+        selectedRadius = option.radius;
+      });
+    });
+
+    radiusContainer.style.display = "flex";
+    applyButton.style.display = "";
+  }
+
+  // -----------------------------------------
+  // UPDATE EMPTY STATE
+  // -----------------------------------------
+
+  function update(filteredItems) {
+    if (!Array.isArray(filteredItems)) return;
+
+    if (filteredItems.length > 0) {
+      hide();
+      return;
+    }
+
+    show();
+    hideRadiusOptions();
+
+    const geo = window.finderGeo?.getApplied();
+    const location = geo?.location;
+    const currentRadius = geo?.radius ?? Infinity;
+
+    const matchingCandidates = candidates.filter(
+      matchesAdvanced
+    );
+
+    if (
+      location &&
+      Number.isFinite(currentRadius) &&
+      matchingCandidates.length
+    ) {
+      const options = getRadiusOptions(
+        matchingCandidates,
+        location,
+        currentRadius
+      );
+
+      if (options.length) {
+        title.textContent =
+          `Keine Therapeut:innen im Umkreis von ${currentRadius} km gefunden.`;
+
+        description.textContent =
+          "Wir haben passende Therapeut:innen in einem größeren Umkreis gefunden. Wähle einen Suchradius, um sie zu entdecken.";
+
+        renderRadiusOptions(options);
+
+        resetButton.style.display = "";
+        return;
+      }
+    }
+
+    title.textContent =
+      "Keine passenden Therapeut:innen gefunden.";
+
+    description.textContent =
+      "Versuche, deine Suchkriterien anzupassen oder einzelne Filter zu entfernen.";
+
+    resetButton.style.display = "";
+  }
+
+  // -----------------------------------------
+  // SCHEDULE UPDATE
+  // -----------------------------------------
+
+  function scheduleUpdate(items) {
+    clearTimeout(updateTimer);
+
+    const snapshot = [...items];
+
+    updateTimer = setTimeout(() => {
+      update(snapshot);
+    }, 120);
+  }
+
+  // -----------------------------------------
+  // APPLY SELECTED RADIUS
+  // -----------------------------------------
+
+  applyButton.addEventListener("click", event => {
+    event.preventDefault();
+
+    if (selectedRadius === null) return;
+
+    const radiusValue = selectedRadius === Infinity
+      ? "all"
+      : String(selectedRadius);
+
+    if (typeof window.finderRadius?.set !== "function") {
+      console.error(
+        "Finder Empty: finderRadius.set unavailable"
+      );
+      return;
+    }
+
+    window.finderRadius.set(radiusValue);
+    window.finderGeo?.apply();
+
+    document.dispatchEvent(
+      new CustomEvent("finder:radius-changed")
+    );
+
+    console.log(
+      "Finder Empty: applied radius",
+      radiusValue
+    );
+  });
+
+  // -----------------------------------------
+  // RESET FILTERS
+  // -----------------------------------------
+
+  resetButton.addEventListener("click", event => {
+    event.preventDefault();
+
+    const clearAll = document.getElementById(
+      "btn-clear-all"
+    );
+
+    if (clearAll) {
+      clearAll.click();
+    } else {
+      console.warn(
+        "Finder Empty: Clear All button missing"
+      );
+    }
+  });
+
+  // -----------------------------------------
+  // RECEIVE PRE-GEO CANDIDATES
+  // -----------------------------------------
+
+  document.addEventListener(
+    "finder:geo-candidates",
+    event => {
+      candidates = event.detail?.items || [];
+    }
+  );
+
+  // -----------------------------------------
+  // FINSWEET V2 INTEGRATION
+  // -----------------------------------------
+
+  (window.FinsweetAttributes ||= []).push([
+    "list",
+    ([list]) => {
+      if (!list) {
+        console.warn(
+          "Finder Empty: Finsweet list not found"
+        );
+        return;
+      }
+
+      list.addHook("sort", items => {
+        scheduleUpdate(items);
+        return items;
+      });
+
+      list.triggerHook("filter");
+
+      console.log("Finder Empty: ready");
+    }
+  ]);
+
+  hide();
+})();
+
