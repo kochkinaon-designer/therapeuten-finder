@@ -2593,9 +2593,11 @@ document.addEventListener("DOMContentLoaded", function () {
 
 
 
+
 /* ==========================================================================
-   17. FINDER MAP — PRACTITIONER MARKERS
+   17. FINDER MAP — PRACTITIONER MARKERS & POPUPS
    Finsweet v2: after filtering, before pagination
+   Hover popup on desktop, click popup on touch devices
    ========================================================================== */
 (() => {
   "use strict";
@@ -2606,7 +2608,14 @@ document.addEventListener("DOMContentLoaded", function () {
   let markers = [];
   let latestItems = null;
   let updateTimer = null;
+  let closeTimer = null;
   let lastSignature = null;
+  let activePopup = null;
+  let activeMarker = null;
+
+  const supportsHover = window.matchMedia(
+    "(hover: hover) and (pointer: fine)"
+  );
 
   // -----------------------------------------
   // READ PRACTITIONER DATA
@@ -2643,12 +2652,227 @@ document.addEventListener("DOMContentLoaded", function () {
       return null;
     }
 
+    // Name
+    const name = root.querySelector(
+      ".doctor-card__name"
+    )?.textContent.trim() ||
+      element.getAttribute("data-name") ||
+      "";
+
+    // Professions / Fachrichtungen
+    const professions = [
+      ...root.querySelectorAll(
+        ".doctor-hero__profecion"
+      )
+    ]
+      .map(node => node.textContent.trim())
+      .filter(Boolean);
+
+    // City — dedicated Webflow class
+    const city = root.querySelector(
+      ".practitioner-city"
+    )?.textContent.trim() || "";
+
+    // Profile image
+    const imageElement = root.querySelector(
+      ".doc-card__photo img"
+    );
+
+    const image = imageElement?.currentSrc ||
+      imageElement?.getAttribute("src") ||
+      "";
+
+    // CMS profile URL
+    const profileUrl = root.querySelector(
+      "a.--clickable"
+    )?.getAttribute("href") || "";
+
     return {
       id: item.id || "",
-      name: element.getAttribute("data-name") || "",
+      name,
+      profession: [...new Set(professions)].join(", "),
+      city,
+      image,
+      profileUrl,
       lat,
       lng
     };
+  }
+
+  // -----------------------------------------
+  // CREATE POPUP CONTENT
+  // -----------------------------------------
+
+  function createPopupContent(practitioner) {
+    const card = document.createElement("div");
+    card.className = "practitioner-popup";
+
+    // Image
+    const imageWrap = document.createElement("div");
+    imageWrap.className = "practitioner-popup__image";
+
+    if (practitioner.image) {
+      const img = document.createElement("img");
+
+      img.src = practitioner.image;
+      img.alt = practitioner.name;
+      img.loading = "lazy";
+
+      imageWrap.appendChild(img);
+    }
+
+    // Content
+    const content = document.createElement("div");
+    content.className = "practitioner-popup__content";
+
+    const info = document.createElement("div");
+    info.className = "practitioner-popup__info";
+
+    // Name
+    const name = document.createElement("h3");
+    name.className = "practitioner-popup__name";
+    name.textContent = practitioner.name;
+
+    info.appendChild(name);
+
+    // Profession
+    if (practitioner.profession) {
+      const profession = document.createElement("p");
+
+      profession.className =
+        "practitioner-popup__profession";
+
+      profession.textContent =
+        practitioner.profession;
+
+      info.appendChild(profession);
+    }
+
+    // City
+    if (practitioner.city) {
+      const city = document.createElement("p");
+
+      city.className =
+        "practitioner-popup__location";
+
+      city.textContent = practitioner.city;
+
+      info.appendChild(city);
+    }
+
+    content.appendChild(info);
+
+    // Profile link
+    if (practitioner.profileUrl) {
+      const link = document.createElement("a");
+
+      link.className =
+        "practitioner-popup__link";
+
+      link.href = practitioner.profileUrl;
+
+      const linkText = document.createElement("span");
+      linkText.textContent = "Profil ansehen";
+
+      const arrow = document.createElement("span");
+      arrow.className = "practitioner-popup__arrow";
+      arrow.textContent = "→";
+      arrow.setAttribute("aria-hidden", "true");
+
+      link.append(linkText, arrow);
+      content.appendChild(link);
+    }
+
+    card.append(imageWrap, content);
+
+    return card;
+  }
+
+  // -----------------------------------------
+  // POPUP MANAGEMENT
+  // -----------------------------------------
+
+  function cancelClose() {
+    clearTimeout(closeTimer);
+    closeTimer = null;
+  }
+
+  function closePopup() {
+    cancelClose();
+
+    if (activePopup) {
+      activePopup.remove();
+      activePopup = null;
+    }
+
+    activeMarker = null;
+  }
+
+  function scheduleClose() {
+    cancelClose();
+
+    closeTimer = setTimeout(() => {
+      closePopup();
+    }, 180);
+  }
+
+  function openPopup(practitioner, marker) {
+    cancelClose();
+
+    if (
+      activeMarker === marker &&
+      activePopup
+    ) {
+      return;
+    }
+
+    closePopup();
+
+    const popup = new mapboxgl.Popup({
+      closeButton: false,
+      closeOnClick: false,
+      closeOnMove: false,
+      offset: 25,
+      maxWidth: "none",
+      className: "practitioner-map-popup",
+      anchor: "bottom"
+    })
+      .setLngLat([
+        practitioner.lng,
+        practitioner.lat
+      ])
+      .setDOMContent(
+        createPopupContent(practitioner)
+      )
+      .addTo(map);
+
+    activePopup = popup;
+    activeMarker = marker;
+
+    const popupElement = popup.getElement();
+
+    // Keep popup open when cursor enters it
+    popupElement.addEventListener(
+      "pointerenter",
+      cancelClose
+    );
+
+    // Close after leaving popup
+    popupElement.addEventListener(
+      "pointerleave",
+      () => {
+        if (supportsHover.matches) {
+          scheduleClose();
+        }
+      }
+    );
+
+    popup.on("close", () => {
+      if (activePopup === popup) {
+        activePopup = null;
+        activeMarker = null;
+      }
+    });
   }
 
   // -----------------------------------------
@@ -2656,6 +2880,8 @@ document.addEventListener("DOMContentLoaded", function () {
   // -----------------------------------------
 
   function clearMarkers() {
+    closePopup();
+
     markers.forEach(marker => marker.remove());
     markers = [];
   }
@@ -2672,6 +2898,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     items.forEach(item => {
       const practitioner = getPractitioner(item);
+
       if (!practitioner) return;
 
       const key = practitioner.id || [
@@ -2686,13 +2913,17 @@ document.addEventListener("DOMContentLoaded", function () {
       practitioners.push(practitioner);
     });
 
-    // Ignore sorting-only changes.
+    // Ignore sorting-only changes
     const signature = practitioners
       .map(p => [
         p.id,
         p.name,
         p.lat,
-        p.lng
+        p.lng,
+        p.profession,
+        p.city,
+        p.image,
+        p.profileUrl
       ].join("|"))
       .sort()
       .join("||");
@@ -2715,6 +2946,48 @@ document.addEventListener("DOMContentLoaded", function () {
         ])
         .addTo(map);
 
+      const markerElement = marker.getElement();
+
+      markerElement.style.cursor = "pointer";
+
+      // Desktop hover
+      markerElement.addEventListener(
+        "pointerenter",
+        () => {
+          if (supportsHover.matches) {
+            openPopup(practitioner, marker);
+          }
+        }
+      );
+
+      markerElement.addEventListener(
+        "pointerleave",
+        () => {
+          if (supportsHover.matches) {
+            scheduleClose();
+          }
+        }
+      );
+
+      // Click / touch
+      markerElement.addEventListener(
+        "click",
+        event => {
+          event.stopPropagation();
+
+          if (
+            activeMarker === marker &&
+            activePopup
+          ) {
+            if (!supportsHover.matches) {
+              closePopup();
+            }
+          } else {
+            openPopup(practitioner, marker);
+          }
+        }
+      );
+
       markers.push(marker);
 
       bounds.extend([
@@ -2723,6 +2996,7 @@ document.addEventListener("DOMContentLoaded", function () {
       ]);
     });
 
+    // Fit map to filtered practitioners
     if (practitioners.length > 0) {
       map.fitBounds(bounds, {
         padding: 60,
@@ -2735,6 +3009,24 @@ document.addEventListener("DOMContentLoaded", function () {
       "Finder Map: markers updated:",
       practitioners.length
     );
+  }
+
+  // -----------------------------------------
+  // MAP INTERACTIONS
+  // -----------------------------------------
+
+  function setupMapInteractions() {
+    map.on("click", event => {
+      if (
+        event.originalEvent?.target?.closest(
+          ".mapboxgl-marker, .practitioner-map-popup"
+        )
+      ) {
+        return;
+      }
+
+      closePopup();
+    });
   }
 
   // -----------------------------------------
@@ -2759,9 +3051,13 @@ document.addEventListener("DOMContentLoaded", function () {
     map = window.finderMap?.getMap();
 
     if (!map) {
-      console.warn("Finder Map: Mapbox instance not found");
+      console.warn(
+        "Finder Map: Mapbox instance not found"
+      );
       return;
     }
+
+    setupMapInteractions();
 
     if (map.loaded()) {
       if (latestItems) {
@@ -2784,29 +3080,28 @@ document.addEventListener("DOMContentLoaded", function () {
     "list",
     ([list]) => {
       if (!list) {
-        console.warn("Finder Map: Finsweet list not found");
+        console.warn(
+          "Finder Map: Finsweet list not found"
+        );
         return;
       }
 
       initMap();
 
       list.addHook("sort", items => {
-        console.log(
-          "MAP DEBUG — filtered items:",
-          items.length
-        );
-
         scheduleUpdate(items);
         return items;
       });
 
       list.triggerHook("filter");
 
-      console.log("Finder Map: Finsweet sync ready");
+      console.log(
+        "Finder Map: Finsweet sync ready"
+      );
     }
   ]);
-})();
 
+})();
 
 
 
