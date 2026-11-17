@@ -2682,10 +2682,15 @@ document.addEventListener("DOMContentLoaded", function () {
       imageElement?.getAttribute("src") ||
       "";
 
-    // CMS profile URL
-    const profileUrl = root.querySelector(
-      "a.u--clickable"
-    )?.getAttribute("href") || "";
+    // CMS practitioner profile URL
+    const profileLink = [
+     ...root.querySelectorAll("a[href]")
+     ].find(link => {
+    const href = link.getAttribute("href") || "";
+    return href.startsWith("/practitioners/");
+  });
+
+const profileUrl = profileLink?.getAttribute("href") || "";
 
     return {
       id: item.id || "",
