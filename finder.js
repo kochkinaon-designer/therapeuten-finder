@@ -1044,9 +1044,10 @@ document.addEventListener("DOMContentLoaded", function () {
 })();
 
 
+
 /* ==========================================================================
    08. CLEAR ALL — MAIN FINDER
-   Reset search, location and quick filters
+   Reset search, location, radius and quick filters
    ========================================================================== */
 (() => {
   "use strict";
@@ -1077,6 +1078,9 @@ document.addEventListener("DOMContentLoaded", function () {
     // Clear applied Geo Filter
     window.finderGeo?.clear();
 
+    // Clear Radius Dropdown UI
+    window.finderRadius?.clear();
+
     // Clear quick filter checkboxes
     [
       "#beratungsform-dropdown",
@@ -1105,6 +1109,7 @@ document.addEventListener("DOMContentLoaded", function () {
     console.log("Finder: all filters cleared");
   });
 })();
+
 
 
 /* ==========================================================================
