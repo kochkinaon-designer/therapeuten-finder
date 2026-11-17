@@ -2680,10 +2680,12 @@ document.addEventListener("DOMContentLoaded", function () {
 
 
 
+
 /* ==========================================================================
    18. FINDER EMPTY STATE
    Smart radius suggestions for zero results
    Only radii with increasing practitioner counts
+   Preserves selected radius during updates
    ========================================================================== */
 (() => {
   "use strict";
@@ -2743,9 +2745,13 @@ document.addEventListener("DOMContentLoaded", function () {
     const rootElement = item?.element;
     if (!rootElement) return null;
 
-    const element = rootElement.matches('[data-practitioner="true"]')
+    const element = rootElement.matches(
+      '[data-practitioner="true"]'
+    )
       ? rootElement
-      : rootElement.querySelector('[data-practitioner="true"]');
+      : rootElement.querySelector(
+          '[data-practitioner="true"]'
+        );
 
     if (!element) return null;
 
@@ -2892,9 +2898,17 @@ document.addEventListener("DOMContentLoaded", function () {
   // -----------------------------------------
 
   function renderRadiusOptions(options) {
-    radiusContainer.replaceChildren();
+    // Preserve selection if it is still available.
+    const availableRadii = options.map(option => option.radius);
 
-    selectedRadius = options[0]?.radius ?? null;
+    if (
+      selectedRadius === null ||
+      !availableRadii.includes(selectedRadius)
+    ) {
+      selectedRadius = options[0]?.radius ?? null;
+    }
+
+    radiusContainer.replaceChildren();
 
     options.forEach(option => {
       const label = document.createElement("label");
@@ -2929,6 +2943,11 @@ document.addEventListener("DOMContentLoaded", function () {
 
       input.addEventListener("change", () => {
         selectedRadius = option.radius;
+
+        console.log(
+          "Finder Empty: selected radius",
+          selectedRadius
+        );
       });
     });
 
@@ -2943,13 +2962,13 @@ document.addEventListener("DOMContentLoaded", function () {
   function update(filteredItems) {
     if (!Array.isArray(filteredItems)) return;
 
+    // Results exist: hide Empty State.
     if (filteredItems.length > 0) {
       hide();
       return;
     }
 
     show();
-    hideRadiusOptions();
 
     const geo = window.finderGeo?.getApplied();
     const location = geo?.location;
@@ -2983,6 +3002,9 @@ document.addEventListener("DOMContentLoaded", function () {
         return;
       }
     }
+
+    // No suitable radius found.
+    hideRadiusOptions();
 
     title.textContent =
       "Keine passenden Therapeut:innen gefunden.";
@@ -3098,4 +3120,3 @@ document.addEventListener("DOMContentLoaded", function () {
 
   hide();
 })();
-
