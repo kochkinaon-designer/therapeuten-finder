@@ -534,31 +534,68 @@
 })();
 
 
+
 /* ==========================================================================
    03. HOME SEARCH SUBMIT
    Transfer selected filters to Finder via URL
+   Prevent Webflow form submission and success message
    ========================================================================== */
 (() => {
   "use strict";
 
-  const form = document.querySelector(
-    ".search-form"
-  );
+  const form = document.querySelector(".search-form");
 
   if (!form) {
     console.warn("Home Search: form not found");
     return;
   }
 
-  form.addEventListener("submit", event => {
+  const wrapper = form.closest(".w-form");
+
+  const successMessage = wrapper?.querySelector(
+    ".w-form-done"
+  );
+
+  const errorMessage = wrapper?.querySelector(
+    ".w-form-fail"
+  );
+
+  // ----------------------------------------------------------
+  // RESET WEBFLOW FORM DISPLAY
+  // ----------------------------------------------------------
+
+  function resetFormDisplay() {
+    form.style.display = "";
+
+    if (successMessage) {
+      successMessage.style.display = "none";
+    }
+
+    if (errorMessage) {
+      errorMessage.style.display = "none";
+    }
+  }
+
+  // ----------------------------------------------------------
+  // HANDLE SEARCH SUBMIT
+  // ----------------------------------------------------------
+
+  function handleSubmit(event) {
+    // Prevent standard Webflow form submission
     event.preventDefault();
+
+    // Prevent Webflow's submit handlers from running
+    event.stopImmediatePropagation();
 
     const url = new URL(
       "/find-a-practitioner",
       window.location.origin
     );
 
-    // Thema
+    // -----------------------------------------
+    // 01. THEMA
+    // -----------------------------------------
+
     const thema = document
       .getElementById("thema-input")
       ?.value.trim();
@@ -567,7 +604,10 @@
       url.searchParams.set("thema", thema);
     }
 
-    // Location
+    // -----------------------------------------
+    // 02. LOCATION
+    // -----------------------------------------
+
     const location = window.finderLocation?.get();
 
     if (location) {
@@ -587,10 +627,16 @@
       );
     }
 
-    // Radius
+    // -----------------------------------------
+    // 03. RADIUS
+    // -----------------------------------------
+
     const radius = window.finderRadius?.get();
 
-    if (radius !== null && radius !== undefined) {
+    if (
+      radius !== null &&
+      radius !== undefined
+    ) {
       url.searchParams.set(
         "radius",
         String(radius)
@@ -602,8 +648,67 @@
       url.toString()
     );
 
+    // Navigate to Finder
     window.location.assign(url.toString());
+  }
+
+  // Capture phase:
+  // Intercept submit before Webflow's form handlers
+  form.addEventListener(
+    "submit",
+    handleSubmit,
+    true
+  );
+
+  // ----------------------------------------------------------
+  // RESTORE FORM AFTER BROWSER BACK NAVIGATION
+  // ----------------------------------------------------------
+
+  window.addEventListener("pageshow", () => {
+    resetFormDisplay();
   });
 
+  // Ensure correct initial state
+  resetFormDisplay();
+
   console.log("Home Search: submit ready");
+
+})();
+
+
+
+/* ==========================================================================
+   04. WEBFLOW FORM STATE RESET
+   Prevent success message after browser back navigation
+   ========================================================================== */
+(() => {
+  "use strict";
+
+  const form = document.querySelector(".search-form");
+
+  if (!form) return;
+
+  const wrapper = form.closest(".w-form");
+
+  if (!wrapper) return;
+
+  const successMessage = wrapper.querySelector(
+    ".w-form-done"
+  );
+
+  const errorMessage = wrapper.querySelector(
+    ".w-form-fail"
+  );
+
+  window.addEventListener("pageshow", () => {
+    form.style.display = "";
+
+    if (successMessage) {
+      successMessage.style.display = "none";
+    }
+
+    if (errorMessage) {
+      errorMessage.style.display = "none";
+    }
+  });
 })();
