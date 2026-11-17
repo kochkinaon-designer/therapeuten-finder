@@ -105,12 +105,16 @@ Webflow.push(function () {
 })();
 
 
+
 /* ============================================================
    03 — MAPBOX LOCATION AUTOCOMPLETE
    Location suggestions, coordinate retrieval and public API
+   Supports restoring location from homepage URL
    ============================================================ */
 
 (() => {
+  "use strict";
+
   const TOKEN = "pk.eyJ1IjoiZHJrYXJsYWNhZGVteSIsImEiOiJjbXc0c2VlcXcwMHFjMnpxdnU5djd1Mnp2In0.WAfodmJtJlMVoSn7AerCQg";
 
   const input = document.getElementById("input-ort");
@@ -127,13 +131,22 @@ Webflow.push(function () {
     sessionToken = crypto.randomUUID();
   };
 
+  // ----------------------------------------------------------
+  // CLEAR SUGGESTIONS
+  // ----------------------------------------------------------
+
   function clearSuggestions() {
     suggestions.replaceChildren();
     suggestions.hidden = true;
   }
 
+  // ----------------------------------------------------------
+  // CLEAR LOCATION STATE
+  // ----------------------------------------------------------
+
   function clearLocation() {
     selectedLocation = null;
+
     delete input.dataset.lat;
     delete input.dataset.lng;
 
@@ -143,6 +156,10 @@ Webflow.push(function () {
       })
     );
   }
+
+  // ----------------------------------------------------------
+  // FETCH MAPBOX DATA
+  // ----------------------------------------------------------
 
   async function fetchJSON(url, signal) {
     const response = await fetch(url, { signal });
@@ -154,7 +171,12 @@ Webflow.push(function () {
     return response.json();
   }
 
+  // ----------------------------------------------------------
+  // SELECT MAPBOX SUGGESTION
+  // ----------------------------------------------------------
+
   async function selectSuggestion(item) {
+    clearTimeout(debounceTimer);
     controller?.abort();
     clearSuggestions();
 
@@ -197,9 +219,16 @@ Webflow.push(function () {
       newSession();
 
     } catch (error) {
-      console.error("Mapbox retrieve error:", error);
+      console.error(
+        "Mapbox retrieve error:",
+        error
+      );
     }
   }
+
+  // ----------------------------------------------------------
+  // RENDER LOCATION SUGGESTIONS
+  // ----------------------------------------------------------
 
   function renderSuggestions(items) {
     clearSuggestions();
@@ -208,6 +237,7 @@ Webflow.push(function () {
       const button = document.createElement("button");
 
       button.type = "button";
+
       button.style.cssText = `
         display:block;
         width:100%;
@@ -224,11 +254,13 @@ Webflow.push(function () {
       title.textContent = item.name;
 
       const subtitle = document.createElement("small");
+
       subtitle.style.cssText = `
         display:block;
         margin-top:0.2rem;
         color:#737969;
       `;
+
       subtitle.textContent = item.place_formatted || "";
 
       button.append(title, subtitle);
@@ -242,6 +274,10 @@ Webflow.push(function () {
 
     suggestions.hidden = items.length === 0;
   }
+
+  // ----------------------------------------------------------
+  // SEARCH MAPBOX LOCATIONS
+  // ----------------------------------------------------------
 
   async function searchLocation(query) {
     controller?.abort();
@@ -271,10 +307,17 @@ Webflow.push(function () {
 
     } catch (error) {
       if (error.name !== "AbortError") {
-        console.error("Mapbox suggest error:", error);
+        console.error(
+          "Mapbox suggest error:",
+          error
+        );
       }
     }
   }
+
+  // ----------------------------------------------------------
+  // INPUT EVENTS
+  // ----------------------------------------------------------
 
   input.addEventListener("input", () => {
     clearTimeout(debounceTimer);
@@ -292,11 +335,19 @@ Webflow.push(function () {
     }, 300);
   });
 
+  // ----------------------------------------------------------
+  // KEYBOARD ACCESSIBILITY
+  // ----------------------------------------------------------
+
   input.addEventListener("keydown", event => {
     if (event.key === "Escape") {
       clearSuggestions();
     }
   });
+
+  // ----------------------------------------------------------
+  // CLICK OUTSIDE
+  // ----------------------------------------------------------
 
   document.addEventListener("pointerdown", event => {
     if (
@@ -307,17 +358,91 @@ Webflow.push(function () {
     }
   });
 
+  // ----------------------------------------------------------
+  // PUBLIC API
+  // ----------------------------------------------------------
+
   window.finderLocation = {
+
+    // Return currently selected location
     get() {
       return selectedLocation;
     },
+
+    // Restore location programmatically
+    // Used by URL Search Initialization
+    set(location) {
+      if (!location) {
+        console.warn(
+          "Finder Location: missing location"
+        );
+        return;
+      }
+
+      const lat = Number(location.lat);
+      const lng = Number(location.lng);
+
+      if (
+        !Number.isFinite(lat) ||
+        !Number.isFinite(lng) ||
+        lat < -90 ||
+        lat > 90 ||
+        lng < -180 ||
+        lng > 180
+      ) {
+        console.warn(
+          "Finder Location: invalid coordinates",
+          location
+        );
+        return;
+      }
+
+      clearTimeout(debounceTimer);
+      controller?.abort();
+
+      selectedLocation = {
+        name: location.name || location.label || "",
+        label: location.label || location.name || "",
+        lat,
+        lng,
+        mapboxId: location.mapboxId || null
+      };
+
+      input.value = selectedLocation.label;
+
+      input.dataset.lat = String(lat);
+      input.dataset.lng = String(lng);
+
+      clearSuggestions();
+
+      document.dispatchEvent(
+        new CustomEvent("finder:location-changed", {
+          detail: { location: selectedLocation }
+        })
+      );
+
+      console.log(
+        "Finder Location: restored",
+        selectedLocation
+      );
+    },
+
+    // Clear location and coordinates
     clear() {
+      clearTimeout(debounceTimer);
+      controller?.abort();
+
       input.value = "";
+
       clearLocation();
       clearSuggestions();
     }
   };
+
+  console.log("Finder Location: ready");
+
 })();
+
 
 
 /* ============================================================
@@ -3124,4 +3249,166 @@ document.addEventListener("DOMContentLoaded", function () {
   ]);
 
   hide();
+})();
+
+
+
+/* ==========================================================================
+   19. URL SEARCH INITIALIZATION
+   Restore homepage search parameters on Finder
+   Apply Thema, location and radius after Finsweet initialization
+   ========================================================================== */
+(() => {
+  "use strict";
+
+  const params = new URLSearchParams(window.location.search);
+
+  const hasSearchParams = [
+    "thema",
+    "location",
+    "lat",
+    "lng",
+    "radius"
+  ].some(key => params.has(key));
+
+  if (!hasSearchParams) return;
+
+  const form = document.querySelector(
+    'form[fs-list-element="filters"]'
+  );
+
+  if (!form) {
+    console.warn("Finder URL: filters form not found");
+    return;
+  }
+
+  const themaInput = document.getElementById("thema-input");
+
+  let initialized = false;
+
+  function restoreSearch() {
+    if (initialized) return;
+
+    if (
+      !window.finderGeo ||
+      !window.finderLocation ||
+      !window.finderRadius
+    ) {
+      console.warn("Finder URL: search APIs not ready");
+      return;
+    }
+
+    initialized = true;
+
+    // -----------------------------------------
+    // 01. RESTORE THEMA
+    // -----------------------------------------
+
+    const thema = params.get("thema");
+
+    if (thema && themaInput) {
+      themaInput.value = thema;
+
+      themaInput.dispatchEvent(
+        new Event("input", { bubbles: true })
+      );
+    }
+
+    // -----------------------------------------
+    // 02. RESTORE LOCATION
+    // -----------------------------------------
+
+    const locationLabel = params.get("location");
+    const latValue = params.get("lat");
+    const lngValue = params.get("lng");
+
+    const lat = Number(latValue);
+    const lng = Number(lngValue);
+
+    const hasValidLocation =
+      locationLabel &&
+      latValue !== null &&
+      lngValue !== null &&
+      Number.isFinite(lat) &&
+      Number.isFinite(lng) &&
+      lat >= -90 &&
+      lat <= 90 &&
+      lng >= -180 &&
+      lng <= 180;
+
+    if (hasValidLocation) {
+      window.finderLocation.set({
+        name: locationLabel,
+        label: locationLabel,
+        lat,
+        lng
+      });
+    }
+
+    // -----------------------------------------
+    // 03. RESTORE RADIUS
+    // -----------------------------------------
+
+    const radius = params.get("radius");
+
+    if (radius !== null) {
+      if (radius === "all") {
+        window.finderRadius.set("all");
+      } else {
+        const radiusNumber = Number(radius);
+
+        if (
+          Number.isFinite(radiusNumber) &&
+          radiusNumber > 0
+        ) {
+          window.finderRadius.set(radiusNumber);
+        }
+      }
+    }
+
+    // -----------------------------------------
+    // 04. APPLY FILTERS
+    // -----------------------------------------
+
+    // Use the existing form submit flow.
+    // Block 06 reads location and radius on submit.
+    // Finsweet processes the form-based filters.
+
+    if (typeof form.requestSubmit === "function") {
+      form.requestSubmit();
+    } else {
+      form.dispatchEvent(
+        new Event("submit", {
+          bubbles: true,
+          cancelable: true
+        })
+      );
+    }
+
+    console.log("Finder URL: search restored", {
+      thema: thema || null,
+      location: hasValidLocation
+        ? locationLabel
+        : null,
+      radius: window.finderRadius.get()
+    });
+  }
+
+  // -----------------------------------------
+  // 05. WAIT FOR FINSWEET
+  // -----------------------------------------
+
+  (window.FinsweetAttributes ||= []).push([
+    "list",
+    ([list]) => {
+      if (!list) {
+        console.warn("Finder URL: Finsweet list not found");
+        return;
+      }
+
+      // Allow other Finder list callbacks to finish.
+      setTimeout(restoreSearch, 0);
+    }
+  ]);
+
 })();
