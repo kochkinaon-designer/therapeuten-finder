@@ -2832,16 +2832,18 @@ const profileUrl = profileLink?.getAttribute("href") || "";
     }
 
     closePopup();
-
+    
     const popup = new mapboxgl.Popup({
       closeButton: false,
       closeOnClick: false,
       closeOnMove: false,
+      focusAfterOpen: false,
       offset: 25,
       maxWidth: "none",
       className: "practitioner-map-popup",
       anchor: "bottom"
-    })
+     })
+
       .setLngLat([
         practitioner.lng,
         practitioner.lat
