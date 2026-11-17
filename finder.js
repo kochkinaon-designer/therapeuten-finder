@@ -2684,7 +2684,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     // CMS profile URL
     const profileUrl = root.querySelector(
-      "a.--clickable"
+      "a.u--clickable"
     )?.getAttribute("href") || "";
 
     return {
