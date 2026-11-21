@@ -817,6 +817,9 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     refreshResults();
+    document.dispatchEvent(
+     new CustomEvent("finder:geo-applied")
+    );
 
     console.log("Finder Geo: search applied", {
       location: appliedLocation?.label || null,
@@ -1276,6 +1279,12 @@ document.addEventListener("DOMContentLoaded", function () {
   let appliedThema = "";
   let suppressSubmitSync = false;
 
+  window.finderThema = {
+    getApplied() {
+      return appliedThema;
+    }
+  };
+   
   const labels = {
     consultation: {
       online: "Online",
@@ -1750,17 +1759,19 @@ document.addEventListener("DOMContentLoaded", function () {
 })();
 
 
+
 /* ==========================================================================
    12. FINDER ADVANCED FILTERS
    Consultation type, insurance, age groups, languages and specializations.
    Synchronizes Quick Filters with Drawer and applies Finsweet filtering.
+   Restores advanced filters from URL.
+   Applies drawer filters immediately on checkbox change.
    Provides window.finderAdvanced public API.
    ========================================================================== */
 (() => {
   "use strict";
 
   const DRAWER = ".filter-drawer";
-  const APPLY_BUTTON = "#btn-apply-filters";
 
   const QUICK_GROUPS = {
     consultation: {
@@ -1804,7 +1815,9 @@ document.addEventListener("DOMContentLoaded", function () {
   const drawer = document.querySelector(DRAWER);
 
   if (!drawer) {
-    console.warn("Finder Advanced Filters: drawer missing");
+    console.warn(
+      "Finder Advanced Filters: drawer missing"
+    );
     return;
   }
 
@@ -2093,6 +2106,112 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   // -----------------------------------------
+  // RESTORE ADVANCED FILTERS FROM URL
+  // -----------------------------------------
+
+  function restoreFromURL() {
+    const params = new URLSearchParams(
+      window.location.search
+    );
+
+    function read(group) {
+      return unique(
+        (params.get(group) || "")
+          .split(",")
+          .map(value => value.trim())
+          .filter(Boolean)
+      );
+    }
+
+    // Restore consultation, insurance and ages.
+    Object.keys(DRAWER_GROUPS).forEach(group => {
+      if (params.has(group)) {
+        setDrawerValues(
+          group,
+          read(group)
+        );
+      }
+    });
+
+    // Restore specializations.
+    if (params.has("specializations")) {
+      const selected = new Set(
+        read("specializations")
+      );
+
+      drawer.querySelectorAll(
+        'input[name="filter-specializations"]'
+      ).forEach(input => {
+        setCheckbox(
+          input,
+          selected.has(input.value)
+        );
+      });
+    }
+
+    // Restore languages.
+    if (params.has("languages")) {
+      const selected = new Set(
+        read("languages")
+      );
+
+      drawer.querySelectorAll(
+        'input[type="checkbox"]'
+      ).forEach(input => {
+        const wrapper =
+          input.closest(".w-checkbox") ||
+          input.closest("label") ||
+          input.parentElement;
+
+        const slug = wrapper
+          ?.querySelector("[data-language]")
+          ?.dataset.language
+          ?.trim();
+
+        if (slug) {
+          setCheckbox(
+            input,
+            selected.has(slug)
+          );
+        }
+      });
+    }
+
+    // Synchronize all restored filters.
+    applyDrawer();
+  }
+
+  // -----------------------------------------
+  // SET SPECIALIZATIONS
+  // Used by Topics Popup and external scripts.
+  // -----------------------------------------
+
+  function setSpecializations(values = []) {
+    if (!Array.isArray(values)) return;
+
+    const selected = new Set(
+      unique(values)
+    );
+
+    drawer.querySelectorAll(
+      'input[name="filter-specializations"]'
+    ).forEach(input => {
+      setCheckbox(
+        input,
+        selected.has(input.value)
+      );
+    });
+
+    // Update only specializations.
+    // Preserve all other applied filters.
+    applied.specializations =
+      getSpecializations();
+
+    notifyAdvanced();
+    refresh();
+  }
+
+  // -----------------------------------------
   // PUBLIC API
   // -----------------------------------------
 
@@ -2134,7 +2253,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
         const slug = wrapper
           ?.querySelector("[data-language]")
-          ?.dataset.language;
+          ?.dataset.language
+          ?.trim();
 
         if (slug === value) {
           setCheckbox(input, false);
@@ -2186,6 +2306,7 @@ document.addEventListener("DOMContentLoaded", function () {
   window.finderAdvanced = {
     getApplied,
     apply: applyDrawer,
+    setSpecializations,
     remove,
     clear
   };
@@ -2218,21 +2339,19 @@ document.addEventListener("DOMContentLoaded", function () {
       applied.insurance
     );
 
+    // Restore advanced filters from URL.
+    restoreFromURL();
+
     bindQuickFilters();
 
-    const applyButton =
-      document.querySelector(APPLY_BUTTON);
+    // Apply drawer filters immediately on checkbox change.
+    drawer.addEventListener("change", event => {
+      if (!event.target.matches(
+        'input[type="checkbox"]'
+      )) return;
 
-    if (applyButton) {
-      applyButton.addEventListener(
-        "click",
-        applyDrawer
-      );
-    } else {
-      console.warn(
-        "Finder Advanced Filters: apply button missing"
-      );
-    }
+      applyDrawer();
+    });
 
     (window.FinsweetAttributes ||= []).push([
       "list",
@@ -2266,6 +2385,7 @@ document.addEventListener("DOMContentLoaded", function () {
     init();
   }
 })();
+
 
 
 /* ==========================================================================
@@ -3727,3 +3847,166 @@ const profileUrl = profileLink?.getAttribute("href") || "";
   ]);
 
 })();
+
+
+
+/* ==========================================================================
+   20. URL FILTER SYNCHRONIZATION
+   Synchronize applied Finder filters with URL.
+   Preserve unrelated query parameters.
+   Update URL without page reload.
+   ========================================================================== */
+(() => {
+  "use strict";
+
+  const form = document.querySelector(
+    'form[fs-list-element="filters"]'
+  );
+
+  if (!form) return;
+
+  const FILTER_KEYS = [
+    "thema",
+    "location",
+    "lat",
+    "lng",
+    "radius",
+    "consultation",
+    "insurance",
+    "ages",
+    "languages",
+    "specializations"
+  ];
+
+  let ready = false;
+  let scheduled = false;
+
+  // -----------------------------------------
+  // BUILD URL FROM APPLIED FILTERS
+  // -----------------------------------------
+
+  function syncURL() {
+    if (!ready) return;
+
+    const url = new URL(window.location.href);
+    const params = url.searchParams;
+
+    // Remove previous Finder parameters.
+    FILTER_KEYS.forEach(key => {
+      params.delete(key);
+    });
+
+    // 01. Thema
+    const thema =
+      window.finderThema?.getApplied();
+
+    if (thema) {
+      params.set("thema", thema);
+    }
+
+    // 02. Geographic filters
+    const geo =
+      window.finderGeo?.getApplied();
+
+    if (geo?.location) {
+      const location = geo.location;
+
+      params.set("location", location.label);
+      params.set("lat", String(location.lat));
+      params.set("lng", String(location.lng));
+
+      if (geo.radius === Infinity) {
+        params.set("radius", "all");
+      } else if (Number.isFinite(geo.radius)) {
+        params.set("radius", String(geo.radius));
+      }
+    }
+
+    // 03. Advanced filters
+    const advanced =
+      window.finderAdvanced?.getApplied();
+
+    if (advanced) {
+      Object.entries(advanced).forEach(
+        ([group, values]) => {
+          if (values.length > 0) {
+            params.set(
+              group,
+              values.join(",")
+            );
+          }
+        }
+      );
+    }
+
+    // 04. Update browser URL
+    if (url.href !== window.location.href) {
+      window.history.replaceState(
+        window.history.state,
+        "",
+        url.href
+      );
+    }
+  }
+
+  // -----------------------------------------
+  // BATCH SYNCHRONIZATION
+  // -----------------------------------------
+
+  function scheduleSync() {
+    if (!ready || scheduled) return;
+
+    scheduled = true;
+
+    queueMicrotask(() => {
+      scheduled = false;
+      syncURL();
+    });
+  }
+
+  // -----------------------------------------
+  // LISTEN TO APPLIED FILTER CHANGES
+  // -----------------------------------------
+
+  [
+    "finder:advanced-filters-changed",
+    "finder:geo-applied",
+    "finder:geo-cleared"
+  ].forEach(eventName => {
+    document.addEventListener(
+      eventName,
+      scheduleSync
+    );
+  });
+
+  form.addEventListener(
+    "submit",
+    scheduleSync
+  );
+
+  document.getElementById("btn-clear-all")
+    ?.addEventListener("click", scheduleSync);
+
+  // -----------------------------------------
+  // WAIT FOR INITIAL URL RESTORATION
+  // -----------------------------------------
+
+  (window.FinsweetAttributes ||= []).push([
+    "list",
+    ([list]) => {
+      if (!list) return;
+
+      // Block 19 restores the initial search
+      // before URL synchronization is enabled.
+      setTimeout(() => {
+        ready = true;
+        syncURL();
+
+        console.log(
+          "Finder URL Synchronization: ready"
+        );
+      }, 0);
+    }
+  ]);
+})();
+
