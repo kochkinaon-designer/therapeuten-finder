@@ -520,8 +520,8 @@ Webflow.push(function () {
         params.set('specializations', selected.join(','));
       }
 
-      window.location.href = '/therapeuten' +
-        (params.toString() ? '?' + params.toString() : '');
+      window.location.href = '/find-a-practitioner' +
+      (params.toString() ? '?' + params.toString() : '');
     });
   }
 
@@ -2242,6 +2242,7 @@ document.addEventListener("DOMContentLoaded", function () {
         listInstance = list;
         list.addHook("filter", advancedFilter);
 
+        notifyAdvanced();
         refresh();
 
         console.log(
