@@ -590,13 +590,13 @@ document.addEventListener("DOMContentLoaded", function () {
     if (appliedRadius === Infinity) return items;
 
     return items.filter(item => {
-      const latElement = item.element.querySelector(
-        "[data-lat]"
-      );
+      const latElement = item.element.matches("[data-lat]")
+        ? item.element
+        : item.element.querySelector("[data-lat]");
 
-      const lngElement = item.element.querySelector(
-        "[data-lng]"
-      );
+      const lngElement = item.element.matches("[data-lng]")
+        ? item.element
+        : item.element.querySelector("[data-lng]");
 
       const latValue = latElement?.getAttribute("data-lat");
       const lngValue = lngElement?.getAttribute("data-lng");
@@ -2263,21 +2263,29 @@ document.addEventListener("DOMContentLoaded", function () {
 })();
 
 
+
 /* ==========================================================================
-   14. FINDER DISTANCE SORTING — FINSWEET V2
-   Sort practitioners by distance from the applied location.
-   Integrates with the existing Sort Dropdown Embed.
+   14. FINDER SORTING — FINSWEET V2
+   Name A-Z, Name Z-A and distance sorting.
+   Integrates with Sort Dropdown Embed.
    ========================================================================== */
+
 (() => {
   "use strict";
 
   let listInstance = null;
+
+  const collator = new Intl.Collator("de", {
+    sensitivity: "base",
+    numeric: true
+  });
 
   // -----------------------------------------
   // DISTANCE CALCULATION (KM)
   // -----------------------------------------
 
   function distanceKm(lat1, lng1, lat2, lng2) {
+
     const rad = value => value * Math.PI / 180;
 
     const dLat = rad(lat2 - lat1);
@@ -2295,21 +2303,30 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   // -----------------------------------------
-  // APPLIED LOCATION
+  // COORDINATE VALIDATION
   // -----------------------------------------
 
-  function getLocation() {
-    const location =
-      window.finderGeo?.getApplied()?.location;
+  function parseCoordinates(latValue, lngValue) {
 
-    if (!location) return null;
+    if (
+      latValue === null ||
+      latValue === undefined ||
+      lngValue === null ||
+      lngValue === undefined ||
+      String(latValue).trim() === "" ||
+      String(lngValue).trim() === ""
+    ) {
+      return null;
+    }
 
-    const lat = Number(location.lat);
-    const lng = Number(location.lng);
+    const lat = Number(latValue);
+    const lng = Number(lngValue);
 
     if (
       !Number.isFinite(lat) ||
-      !Number.isFinite(lng)
+      !Number.isFinite(lng) ||
+      Math.abs(lat) > 90 ||
+      Math.abs(lng) > 180
     ) {
       return null;
     }
@@ -2318,65 +2335,206 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   // -----------------------------------------
+  // APPLIED LOCATION
+  // -----------------------------------------
+
+  function getLocation() {
+
+    const location =
+      window.finderGeo?.getApplied()?.location;
+
+    if (!location) return null;
+
+    return parseCoordinates(
+      location.lat,
+      location.lng
+    );
+  }
+
+  // -----------------------------------------
+  // PRACTITIONER DATA
+  // -----------------------------------------
+
+  function getPractitionerElement(item) {
+
+    const element = item.element;
+
+    if (!element) return null;
+
+    if (
+      element.matches(
+        '[data-practitioner="true"]'
+      )
+    ) {
+      return element;
+    }
+
+    return element.querySelector(
+      '[data-practitioner="true"]'
+    );
+  }
+
+  // -----------------------------------------
+  // PRACTITIONER NAME
+  // -----------------------------------------
+
+  function getItemName(item) {
+
+    const element = item.element;
+
+    if (!element) return "";
+
+    const nameElement =
+      element.matches(".practitioner-name")
+        ? element
+        : element.querySelector(
+            ".practitioner-name"
+          );
+
+    const practitioner =
+      getPractitionerElement(item);
+
+    return (
+      nameElement?.textContent?.trim() ||
+      practitioner?.getAttribute("data-name")?.trim() ||
+      ""
+    );
+  }
+
+  // -----------------------------------------
   // PRACTITIONER DISTANCE
   // -----------------------------------------
 
   function getItemDistance(item, location) {
-    const element = item.element.querySelector(
-      '[data-practitioner="true"]'
-    );
+
+    const element =
+      getPractitionerElement(item) ||
+      item.element;
 
     if (!element) return Infinity;
 
-    const latValue = element.getAttribute("data-lat");
-    const lngValue = element.getAttribute("data-lng");
+    const latElement =
+      element.matches("[data-lat]")
+        ? element
+        : element.querySelector("[data-lat]");
 
-    if (
-      latValue === null ||
-      lngValue === null ||
-      !latValue.trim() ||
-      !lngValue.trim()
-    ) {
-      return Infinity;
-    }
+    const lngElement =
+      element.matches("[data-lng]")
+        ? element
+        : element.querySelector("[data-lng]");
 
-    const lat = Number(latValue);
-    const lng = Number(lngValue);
+    const coordinates = parseCoordinates(
+      latElement?.getAttribute("data-lat"),
+      lngElement?.getAttribute("data-lng")
+    );
 
-    if (
-      !Number.isFinite(lat) ||
-      !Number.isFinite(lng)
-    ) {
-      return Infinity;
-    }
+    if (!coordinates) return Infinity;
 
     return distanceKm(
       location.lat,
       location.lng,
-      lat,
-      lng
+      coordinates.lat,
+      coordinates.lng
     );
+  }
+
+  // -----------------------------------------
+  // COMPARE NAMES
+  // -----------------------------------------
+
+  function compareNames(a, b, descending = false) {
+
+    const nameA = getItemName(a);
+    const nameB = getItemName(b);
+
+    // Profiles without names are placed last.
+    if (!nameA && !nameB) return 0;
+    if (!nameA) return 1;
+    if (!nameB) return -1;
+
+    const comparison = collator.compare(
+      nameA,
+      nameB
+    );
+
+    return descending
+      ? -comparison
+      : comparison;
+  }
+
+  // -----------------------------------------
+  // SORT BY NAME
+  // -----------------------------------------
+
+  function sortByName(items, descending = false) {
+
+    return [...items].sort((a, b) => {
+      return compareNames(a, b, descending);
+    });
+  }
+
+  // -----------------------------------------
+  // SORT BY DISTANCE
+  // -----------------------------------------
+
+  function sortByDistance(items, location) {
+
+    // Calculate each distance only once.
+    const prepared = items.map(item => ({
+      item,
+      distance: getItemDistance(item, location)
+    }));
+
+    prepared.sort((a, b) => {
+
+      // Equal distances: sort alphabetically.
+      if (a.distance === b.distance) {
+        return compareNames(a.item, b.item);
+      }
+
+      // Profiles without coordinates go last.
+      if (!Number.isFinite(a.distance)) {
+        return 1;
+      }
+
+      if (!Number.isFinite(b.distance)) {
+        return -1;
+      }
+
+      return a.distance - b.distance;
+    });
+
+    return prepared.map(entry => entry.item);
   }
 
   // -----------------------------------------
   // CUSTOM SORT HOOK
   // -----------------------------------------
 
-  function distanceSort(items) {
-    if (window.finderSort?.get() !== "distance") {
-      return items;
+  function sortPractitioners(items) {
+
+    const mode =
+      window.finderSort?.get() || "name";
+
+    if (mode === "name-desc") {
+      return sortByName(items, true);
     }
 
-    const location = getLocation();
+    if (mode === "distance") {
 
-    if (!location) return items;
+      const location = getLocation();
 
-    return [...items].sort((a, b) => {
-      const distanceA = getItemDistance(a, location);
-      const distanceB = getItemDistance(b, location);
+      if (!location) {
+        return sortByName(items);
+      }
 
-      return distanceA - distanceB;
-    });
+      return sortByDistance(
+        items,
+        location
+      );
+    }
+
+    return sortByName(items);
   }
 
   // -----------------------------------------
@@ -2384,53 +2542,85 @@ document.addEventListener("DOMContentLoaded", function () {
   // -----------------------------------------
 
   function refreshSort() {
+
     if (!listInstance) return;
 
-    // Return to first page after changing sorting.
+    // Return to the first page.
     listInstance.currentPage.value = 1;
 
-    // Run Finsweet sorting lifecycle.
+    // Run Finsweet sorting and rendering.
     listInstance.triggerHook("sort");
   }
 
   // -----------------------------------------
-  // DROPDOWN EVENT
+  // DROPDOWN EVENTS
   // -----------------------------------------
 
   document.addEventListener(
     "finder:sort-changed",
     event => {
+
       const mode = event.detail?.sort;
 
-      if (mode === "distance") {
-        if (!getLocation()) {
-          // No applied location: fall back to Name A-Z.
-          window.finderSort?.set("name");
-
-          if (listInstance) {
-            listInstance.sorting.value.fieldKey = "name";
-            listInstance.sorting.value.direction = "asc";
-          }
-
-          refreshSort();
-
-          console.info(
-            "Finder Distance: no location selected"
-          );
-
-          return;
-        }
-
-        refreshSort();
-
-        console.log(
-          "Finder Distance: sorting applied"
-        );
+      if (
+        mode !== "name" &&
+        mode !== "name-desc" &&
+        mode !== "distance"
+      ) {
+        return;
       }
 
-      if (mode === "name") {
+      if (
+        mode === "distance" &&
+        !getLocation()
+      ) {
+        window.finderSort?.set("name");
+        return;
+      }
+
+      refreshSort();
+
+      console.log(
+        "Finder Sorting: applied",
+        mode
+      );
+
+    }
+  );
+
+  // -----------------------------------------
+  // LOCATION EVENTS
+  // -----------------------------------------
+
+  document.addEventListener(
+    "finder:geo-applied",
+    () => {
+
+      window.finderSort
+        ?.updateAvailability?.();
+
+      if (
+        window.finderSort?.get() === "distance"
+      ) {
         refreshSort();
       }
+
+    }
+  );
+
+  document.addEventListener(
+    "finder:geo-cleared",
+    () => {
+
+      window.finderSort
+        ?.updateAvailability?.();
+
+      if (
+        window.finderSort?.get() === "distance"
+      ) {
+        window.finderSort.set("name");
+      }
+
     }
   );
 
@@ -2441,22 +2631,35 @@ document.addEventListener("DOMContentLoaded", function () {
   (window.FinsweetAttributes ||= []).push([
     "list",
     ([list]) => {
+
       if (!list) {
+
         console.warn(
-          "Finder Distance: Finsweet list not found"
+          "Finder Sorting: Finsweet list not found"
         );
+
         return;
       }
 
       listInstance = list;
 
-      // Sorting runs after filtering,
-      // before pagination and rendering.
-      list.addHook("sort", distanceSort);
+      // Runs after filtering and before pagination.
+      list.addHook(
+        "sort",
+        sortPractitioners
+      );
+
+      window.finderSort
+        ?.updateAvailability?.();
+
+      // Wait until other synchronous hooks
+      // have been registered.
+      queueMicrotask(refreshSort);
 
       console.log(
-        "Finder Distance Sorting: ready"
+        "Finder Sorting: ready"
       );
+
     }
   ]);
 
