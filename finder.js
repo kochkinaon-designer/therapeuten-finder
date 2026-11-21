@@ -461,7 +461,7 @@ Webflow.push(function () {
   var countEl = document.querySelector('.popup-count');
   var resetBtn = document.querySelector('.popup-reset');
   var closeBtn = document.querySelector('.popup-close');
-  var confirmBtn = document.querySelector('.popup-confirm');
+  var confirmBtn = document.getElementById('popup-confirm');
 
   swiperEl.addEventListener('click', function (event) {
     var slide = event.target.closest('.swiper-slide');
@@ -505,11 +505,23 @@ Webflow.push(function () {
   }
 
   if (confirmBtn) {
-    confirmBtn.addEventListener('click', function () {
-      var selected = Array.from(chipsContainer.querySelectorAll('.popup-chip.is--selected'))
+    confirmBtn.addEventListener('click', function (event) {
+      event.preventDefault();
+
+      var selected = Array.from(
+        chipsContainer.querySelectorAll('.popup-chip.is--selected')
+      )
         .map(function (c) { return c.dataset.slug; })
         .filter(Boolean);
-      window.location.href = '/therapeuten' + (selected.length > 0 ? '?specializations=' + selected.join(',') : '');
+
+      var params = new URLSearchParams();
+
+      if (selected.length > 0) {
+        params.set('specializations', selected.join(','));
+      }
+
+      window.location.href = '/therapeuten' +
+        (params.toString() ? '?' + params.toString() : '');
     });
   }
 
