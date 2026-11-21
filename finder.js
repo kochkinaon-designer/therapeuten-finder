@@ -3,78 +3,9 @@
 
 
 /* ============================================================
-   01 — TOPICS SWIPER
+   01 — TOPICS SWIPER in topics-selection.js
    Category slider initialization and active slide behavior
    ============================================================ */
-
-const TopicsSwiper = new Swiper('.swiper.is--topics', {
-  direction: 'horizontal',
-  loop: false,
-  slidesPerView: 1.3,
-  spaceBetween: 16,
-  breakpoints: {
-    480: {
-      slidesPerView: 2,
-      spaceBetween: 16,
-    },
-    768: {
-      slidesPerView: 3,
-      spaceBetween: 16,
-    },
-    992: {
-      slidesPerView: 4,
-      spaceBetween: 24,
-    },
-  },
-  navigation: {
-    nextEl: '.swiper-btn.is--next',
-    prevEl: '.swiper-btn.is--prev',
-    disabledClass: 'is--disabled',
-  },
-  scrollbar: {
-    el: '.swiper-scrollbar.is--topics',
-    draggable: true,
-  },
-});
-
-Webflow.push(function () {
-  var swiperEl = document.querySelector('.swiper.is--topics');
-  if (!swiperEl) return;
-
-  setTimeout(function () {
-    var swiperInstance = swiperEl.swiper;
-    if (!swiperInstance) return;
-
-    var slides = Array.from(swiperInstance.slides);
-
-    function setActive(index) {
-      slides.forEach(function (slide, i) {
-        var card = slide.querySelector('.category-card');
-        var isActive = i === index;
-        slide.classList.toggle('is--active-slide', isActive);
-        if (card) card.classList.toggle('is--active', isActive);
-      });
-    }
-
-    setActive(0);
-
-    swiperInstance.on('slideChange', function () {
-      setActive(swiperInstance.activeIndex);
-    });
-
-    slides.forEach(function (slide, i) {
-      slide.addEventListener('mouseenter', function () {
-        setActive(i);
-      });
-    });
-
-    swiperEl.addEventListener('mouseleave', function () {
-      setActive(swiperInstance.activeIndex);
-    });
-
-  }, 300);
-});
-
 
 /* ============================================================
    02 — MARQUEE CARDS
@@ -446,97 +377,9 @@ Webflow.push(function () {
 
 
 /* ============================================================
-   04 — TOPICS POPUP
+   04 — TOPICS POPUP in topics-selection.js
    Topic selection and navigation to Finder with URL filters
    ============================================================ */
-
-(function () {
-  var swiperEl = document.querySelector('.swiper.is--topics');
-  if (!swiperEl) return;
-
-  var popup = document.querySelector('.topics-popup');
-  var overlay = document.querySelector('.popup-overlay');
-  var popupTitle = document.querySelector('.popup-title');
-  var chipsContainer = document.querySelector('.popup-chips');
-  var countEl = document.querySelector('.popup-count');
-  var resetBtn = document.querySelector('.popup-reset');
-  var closeBtn = document.querySelector('.popup-close');
-  var confirmBtn = document.getElementById('popup-confirm');
-
-  swiperEl.addEventListener('click', function (event) {
-    var slide = event.target.closest('.swiper-slide');
-    if (!slide) return;
-
-    var categoryId = slide.dataset.categoryId;
-    var categoryTitle = slide.dataset.categoryTitle;
-    if (!categoryId) return;
-
-    if (popupTitle) popupTitle.textContent = categoryTitle;
-
-    chipsContainer.querySelectorAll('.popup-chip').forEach(function (chip) {
-      chip.classList.remove('is--selected');
-      chip.style.display = chip.dataset.category === categoryId ? '' : 'none';
-    });
-
-    updateCount();
-    popup.classList.add('is--open');
-  });
-
-  chipsContainer.addEventListener('click', function (e) {
-    var chip = e.target.closest('.popup-chip');
-    if (!chip || chip.style.display === 'none') return;
-    chip.classList.toggle('is--selected');
-    updateCount();
-  });
-
-  function updateCount() {
-    var count = chipsContainer.querySelectorAll('.popup-chip.is--selected').length;
-    if (countEl) countEl.textContent = count > 0 ? count + ' Themen gewählt' : '';
-    if (resetBtn) resetBtn.style.visibility = count > 0 ? 'visible' : 'hidden';
-  }
-
-  if (resetBtn) {
-    resetBtn.addEventListener('click', function () {
-      chipsContainer.querySelectorAll('.popup-chip.is--selected').forEach(function (c) {
-        c.classList.remove('is--selected');
-      });
-      updateCount();
-    });
-  }
-
-  if (confirmBtn) {
-    confirmBtn.addEventListener('click', function (event) {
-      event.preventDefault();
-
-      var selected = Array.from(
-        chipsContainer.querySelectorAll('.popup-chip.is--selected')
-      )
-        .map(function (c) { return c.dataset.slug; })
-        .filter(Boolean);
-
-      var params = new URLSearchParams();
-
-      if (selected.length > 0) {
-        params.set('specializations', selected.join(','));
-      }
-
-      window.location.href = '/find-a-practitioner' +
-      (params.toString() ? '?' + params.toString() : '');
-    });
-  }
-
-  if (closeBtn) closeBtn.addEventListener('click', closePopup);
-  if (overlay) overlay.addEventListener('click', closePopup);
-  document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') closePopup();
-  });
-
-  function closePopup() {
-    popup.classList.remove('is--open');
-  }
-
-})();
-
 
 
 /* ==========================================================================
