@@ -2,6 +2,83 @@
 // Main JavaScript
 
 
+/* ==========================================================================
+   00. SHARED GEO UTILITIES
+   Coordinate validation, practitioner coordinates and distance in kilometers.
+   Independent of Mapbox, Finsweet and the Finder UI.
+   ========================================================================== */
+(() => {
+  "use strict";
+
+  function parseCoordinates(latValue, lngValue) {
+    if (
+      latValue == null ||
+      lngValue == null ||
+      String(latValue).trim() === "" ||
+      String(lngValue).trim() === ""
+    ) {
+      return null;
+    }
+
+    const lat = Number(latValue);
+    const lng = Number(lngValue);
+
+    if (
+      !Number.isFinite(lat) ||
+      !Number.isFinite(lng) ||
+      Math.abs(lat) > 90 ||
+      Math.abs(lng) > 180
+    ) {
+      return null;
+    }
+
+    return { lat, lng };
+  }
+
+  function distanceKm(lat1, lng1, lat2, lng2) {
+    const rad = value => value * Math.PI / 180;
+
+    const dLat = rad(lat2 - lat1);
+    const dLng = rad(lng2 - lng1);
+
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(rad(lat1)) *
+      Math.cos(rad(lat2)) *
+      Math.sin(dLng / 2) ** 2;
+
+    return 6371 * 2 * Math.asin(
+      Math.sqrt(Math.min(1, a))
+    );
+  }
+
+  function getPractitionerCoordinates(item) {
+    const root = item?.element;
+    if (!root) return null;
+
+    const element = root.matches(
+      '[data-practitioner="true"]'
+    )
+      ? root
+      : root.querySelector(
+          '[data-practitioner="true"]'
+        );
+
+    if (!element) return null;
+
+    return parseCoordinates(
+      element.getAttribute("data-lat"),
+      element.getAttribute("data-lng")
+    );
+  }
+
+  window.finderUtils = Object.freeze({
+    parseCoordinates,
+    distanceKm,
+    getPractitionerCoordinates
+  });
+})();
+
 /* ============================================================
    01 — TOPICS SWIPER in topics-selection.js
    Category slider initialization and active slide behavior
@@ -535,6 +612,7 @@ document.addEventListener("DOMContentLoaded", function () {
 });
 
 
+
 /* ==========================================================================
    06. GEO FILTER
    Finsweet geo filter hook, applied location and radius
@@ -556,32 +634,17 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   // Calculate distance between coordinates (km)
-  function distanceKm(lat1, lng1, lat2, lng2) {
-    const rad = value => value * Math.PI / 180;
-
-    const dLat = rad(lat2 - lat1);
-    const dLng = rad(lng2 - lng1);
-
-    const a =
-      Math.sin(dLat / 2) ** 2 +
-      Math.cos(rad(lat1)) *
-      Math.cos(rad(lat2)) *
-      Math.sin(dLng / 2) ** 2;
-
-    return 6371 * 2 * Math.asin(
-      Math.sqrt(Math.min(1, a))
-    );
-  }
+  const { distanceKm } = window.finderUtils;
 
   // Additional geographic filter for Finsweet
   function geoFilter(items) {
 
-     // Share candidates before applying the radius.
+    // Share candidates before applying the radius
     document.dispatchEvent(
-    new CustomEvent("finder:geo-candidates", {
-      detail: { items: [...items] }
+      new CustomEvent("finder:geo-candidates", {
+        detail: { items: [...items] }
       })
-     );
+    );
 
     // No location selected
     if (!appliedLocation) return items;
@@ -590,26 +653,12 @@ document.addEventListener("DOMContentLoaded", function () {
     if (appliedRadius === Infinity) return items;
 
     return items.filter(item => {
-      const latElement = item.element.matches("[data-lat]")
-        ? item.element
-        : item.element.querySelector("[data-lat]");
+      const coordinates =
+        window.finderUtils.getPractitionerCoordinates(item);
 
-      const lngElement = item.element.matches("[data-lng]")
-        ? item.element
-        : item.element.querySelector("[data-lng]");
+      if (!coordinates) return false;
 
-      const latValue = latElement?.getAttribute("data-lat");
-      const lngValue = lngElement?.getAttribute("data-lng");
-
-      if (!latValue || !lngValue) return false;
-
-      const lat = Number(latValue);
-      const lng = Number(lngValue);
-
-      if (
-        !Number.isFinite(lat) ||
-        !Number.isFinite(lng)
-      ) return false;
+      const { lat, lng } = coordinates;
 
       return distanceKm(
         appliedLocation.lat,
@@ -660,8 +709,9 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     refreshResults();
+
     document.dispatchEvent(
-     new CustomEvent("finder:geo-applied")
+      new CustomEvent("finder:geo-applied")
     );
 
     console.log("Finder Geo: search applied", {
@@ -2264,6 +2314,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
 
 
+
 /* ==========================================================================
    14. FINDER SORTING — FINSWEET V2
    Name A-Z, Name Z-A and distance sorting.
@@ -2281,58 +2332,14 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
   // -----------------------------------------
-  // DISTANCE CALCULATION (KM)
+  // SHARED GEO UTILITIES
   // -----------------------------------------
 
-  function distanceKm(lat1, lng1, lat2, lng2) {
-
-    const rad = value => value * Math.PI / 180;
-
-    const dLat = rad(lat2 - lat1);
-    const dLng = rad(lng2 - lng1);
-
-    const a =
-      Math.sin(dLat / 2) ** 2 +
-      Math.cos(rad(lat1)) *
-      Math.cos(rad(lat2)) *
-      Math.sin(dLng / 2) ** 2;
-
-    return 6371 * 2 * Math.asin(
-      Math.sqrt(Math.min(1, a))
-    );
-  }
-
-  // -----------------------------------------
-  // COORDINATE VALIDATION
-  // -----------------------------------------
-
-  function parseCoordinates(latValue, lngValue) {
-
-    if (
-      latValue === null ||
-      latValue === undefined ||
-      lngValue === null ||
-      lngValue === undefined ||
-      String(latValue).trim() === "" ||
-      String(lngValue).trim() === ""
-    ) {
-      return null;
-    }
-
-    const lat = Number(latValue);
-    const lng = Number(lngValue);
-
-    if (
-      !Number.isFinite(lat) ||
-      !Number.isFinite(lng) ||
-      Math.abs(lat) > 90 ||
-      Math.abs(lng) > 180
-    ) {
-      return null;
-    }
-
-    return { lat, lng };
-  }
+  const {
+    distanceKm,
+    parseCoordinates,
+    getPractitionerCoordinates
+  } = window.finderUtils;
 
   // -----------------------------------------
   // APPLIED LOCATION
@@ -2407,26 +2414,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function getItemDistance(item, location) {
 
-    const element =
-      getPractitionerElement(item) ||
-      item.element;
-
-    if (!element) return Infinity;
-
-    const latElement =
-      element.matches("[data-lat]")
-        ? element
-        : element.querySelector("[data-lat]");
-
-    const lngElement =
-      element.matches("[data-lng]")
-        ? element
-        : element.querySelector("[data-lng]");
-
-    const coordinates = parseCoordinates(
-      latElement?.getAttribute("data-lat"),
-      lngElement?.getAttribute("data-lng")
-    );
+    const coordinates =
+      getPractitionerCoordinates(item);
 
     if (!coordinates) return Infinity;
 
@@ -2666,6 +2655,7 @@ document.addEventListener("DOMContentLoaded", function () {
 })();
 
 
+
 /* ==========================================================================
    15. FINDER VIEW TOGGLE — GRID / LIST
    ========================================================================== */
@@ -2773,6 +2763,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
 
 
+
 /* ==========================================================================
    17. FINDER MAP — PRACTITIONER MARKERS & POPUPS
    Finsweet v2: after filtering, before pagination
@@ -2796,6 +2787,9 @@ document.addEventListener("DOMContentLoaded", function () {
     "(hover: hover) and (pointer: fine)"
   );
 
+  const { getPractitionerCoordinates } =
+    window.finderUtils;
+
   // -----------------------------------------
   // READ PRACTITIONER DATA
   // -----------------------------------------
@@ -2810,26 +2804,10 @@ document.addEventListener("DOMContentLoaded", function () {
 
     if (!element) return null;
 
-    const latValue = element.getAttribute("data-lat");
-    const lngValue = element.getAttribute("data-lng");
+    const coordinates = getPractitionerCoordinates(item);
+    if (!coordinates) return null;
 
-    if (!latValue?.trim() || !lngValue?.trim()) {
-      return null;
-    }
-
-    const lat = Number(latValue);
-    const lng = Number(lngValue);
-
-    if (
-      !Number.isFinite(lat) ||
-      !Number.isFinite(lng) ||
-      lat < -90 ||
-      lat > 90 ||
-      lng < -180 ||
-      lng > 180
-    ) {
-      return null;
-    }
+    const { lat, lng } = coordinates;
 
     // Name
     const name = root.querySelector(
@@ -2863,13 +2841,14 @@ document.addEventListener("DOMContentLoaded", function () {
 
     // CMS practitioner profile URL
     const profileLink = [
-     ...root.querySelectorAll("a[href]")
-     ].find(link => {
-    const href = link.getAttribute("href") || "";
-    return href.startsWith("/practitioners/");
-  });
+      ...root.querySelectorAll("a[href]")
+    ].find(link => {
+      const href = link.getAttribute("href") || "";
+      return href.startsWith("/practitioners/");
+    });
 
-const profileUrl = profileLink?.getAttribute("href") || "";
+    const profileUrl =
+      profileLink?.getAttribute("href") || "";
 
     return {
       id: item.id || "",
@@ -3011,7 +2990,7 @@ const profileUrl = profileLink?.getAttribute("href") || "";
     }
 
     closePopup();
-    
+
     const popup = new mapboxgl.Popup({
       closeButton: false,
       closeOnClick: false,
@@ -3021,8 +3000,7 @@ const profileUrl = profileLink?.getAttribute("href") || "";
       maxWidth: "none",
       className: "practitioner-map-popup",
       anchor: "bottom"
-     })
-
+    })
       .setLngLat([
         practitioner.lng,
         practitioner.lat
@@ -3292,6 +3270,8 @@ const profileUrl = profileLink?.getAttribute("href") || "";
 
 
 
+
+
 /* ==========================================================================
    18. FINDER EMPTY STATE
    Smart radius suggestions for zero results
@@ -3328,67 +3308,13 @@ const profileUrl = profileLink?.getAttribute("href") || "";
   let updateTimer = null;
 
   // -----------------------------------------
-  // DISTANCE CALCULATION
+  // SHARED GEO UTILITIES
   // -----------------------------------------
 
-  function distanceKm(lat1, lng1, lat2, lng2) {
-    const rad = value => value * Math.PI / 180;
-
-    const dLat = rad(lat2 - lat1);
-    const dLng = rad(lng2 - lng1);
-
-    const a =
-      Math.sin(dLat / 2) ** 2 +
-      Math.cos(rad(lat1)) *
-      Math.cos(rad(lat2)) *
-      Math.sin(dLng / 2) ** 2;
-
-    return 6371 * 2 * Math.asin(
-      Math.sqrt(Math.min(1, a))
-    );
-  }
-
-  // -----------------------------------------
-  // GET PRACTITIONER COORDINATES
-  // -----------------------------------------
-
-  function getCoordinates(item) {
-    const rootElement = item?.element;
-    if (!rootElement) return null;
-
-    const element = rootElement.matches(
-      '[data-practitioner="true"]'
-    )
-      ? rootElement
-      : rootElement.querySelector(
-          '[data-practitioner="true"]'
-        );
-
-    if (!element) return null;
-
-    const latValue = element.getAttribute("data-lat");
-    const lngValue = element.getAttribute("data-lng");
-
-    if (!latValue?.trim() || !lngValue?.trim()) {
-      return null;
-    }
-
-    const lat = Number(latValue);
-    const lng = Number(lngValue);
-
-    if (
-      !Number.isFinite(lat) ||
-      !Number.isFinite(lng) ||
-      lat < -90 ||
-      lat > 90 ||
-      lng < -180 ||
-      lng > 180
-    ) {
-      return null;
-    }
-
-    return { lat, lng };
-  }
+  const {
+    distanceKm,
+    getPractitionerCoordinates: getCoordinates
+  } = window.finderUtils;
 
   // -----------------------------------------
   // ADVANCED FILTER MATCHING
@@ -3731,6 +3657,7 @@ const profileUrl = profileLink?.getAttribute("href") || "";
 
   hide();
 })();
+
 
 
 
