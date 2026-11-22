@@ -1,0 +1,139 @@
+/* ==========================================================================
+   TOPICS SELECTION — STYLESHEET
+   Dr. Anne Karl Academy
+
+   Shared styles for Homepage and Finder
+   Webflow design tokens
+   REM-based dimensions
+   Webflow-compatible breakpoints (px)
+   ========================================================================== */
+
+
+/* ==========================================================================
+   01. TOPICS SWIPER
+   ========================================================================== */
+
+.swiper.is--topics {
+  overflow: visible;
+}
+
+.swiper.is--topics .swiper-wrapper {
+  display: flex;
+  align-items: stretch;
+}
+
+.swiper.is--topics .swiper-slide .category-card {
+  width: 100%;
+  height: 14.5rem;
+}
+
+
+/* ==========================================================================
+   02. SWIPER SCROLLBAR
+   ========================================================================== */
+
+.swiper-scrollbar.is--topics {
+  position: absolute;
+  left: calc(50% + var(--size--38));
+  top: 2rem;
+  width: 36%;
+  height: 0.125rem;
+  border-radius: 0.125rem;
+  background-color: var(--_token---bg-alt, #E8EDED);
+}
+
+.swiper-scrollbar.is--topics .swiper-scrollbar-drag {
+  height: 100%;
+  border-radius: inherit;
+  background-color: var(--_token---button-bg, #5D6956);
+  cursor: grab;
+}
+
+
+/* ==========================================================================
+   03. CATEGORY CARD — DEFAULT STATE
+   ========================================================================== */
+
+.category-card__text {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.category-card__bottom {
+  transform: translateY(4rem);
+  transition: transform 0.4s ease;
+}
+
+.category-card__divider {
+  display: block;
+  width: 0;
+  opacity: 0;
+  transition: width 0.4s ease, opacity 0.3s ease;
+}
+
+
+/* ==========================================================================
+   04. CATEGORY CARD — ACTIVE STATE
+   ========================================================================== */
+
+.category-card.is--active .category-card__number,
+.category-card.is--active .category-card__text,
+.category-card.is--active .text-button {
+  color: var(--_token---text-secondary-light, #F7F6F2);
+}
+
+.category-card.is--active .category-card__title {
+  color: var(--_token---text-white, #FFFFFF);
+}
+
+.category-card.is--active .category-card__bottom {
+  transform: translateY(0);
+}
+
+.category-card.is--active .category-card__divider {
+  width: 100%;
+  opacity: 1;
+}
+
+.category-card.is--active .category-card__bg {
+  opacity: 1;
+}
+
+
+/* ==========================================================================
+   05. RESPONSIVE — TABLET & MOBILE LANDSCAPE
+   Breakpoint: max-width 991px
+   ========================================================================== */
+
+@media (max-width: 991px) {
+
+  .swiper-scrollbar.is--topics {
+    width: 85%;
+    left: 0;
+    top: 1.8rem;
+  }
+
+}
+
+
+/* ==========================================================================
+   06. RESPONSIVE — MOBILE PORTRAIT
+   Breakpoint: max-width 479px
+   ========================================================================== */
+
+@media (max-width: 479px) {
+
+  .swiper-scrollbar.is--topics {
+    width: 100%;
+    top: auto;
+    bottom: 0;
+  }
+
+}
+
+
+/* ==========================================================================
+   END OF TOPICS SELECTION CSS
+   ========================================================================== */
