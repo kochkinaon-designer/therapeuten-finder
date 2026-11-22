@@ -1,0 +1,724 @@
+/* ==========================================================================
+   THERAPEUTEN-FINDER — STYLESHEET
+   Dr. Anne Karl Academy
+
+   Webflow design tokens
+   REM-based dimensions
+   Webflow-compatible breakpoints (px)
+   Desktop-first responsive layout
+   ========================================================================== */
+
+
+/* ==========================================================================
+   01. FILTER CATEGORY ACCORDION
+   ========================================================================== */
+
+.filter-category__content[hidden] {
+  display: none !important;
+}
+
+.filter-group__chevron.is--small {
+  transition: transform 0.2s ease;
+}
+
+.filter-category__trigger[aria-expanded="true"]
+.filter-group__chevron.is--small {
+  transform: rotate(90deg);
+}
+
+
+/* ==========================================================================
+   02. SEARCH FIELDS & LOCATION SUGGESTIONS
+   ========================================================================== */
+
+.search-block {
+  position: relative;
+  z-index: 50;
+  overflow: visible;
+}
+
+.filter-fields-wrap,
+.filter-fields__location,
+.filter-field--ort {
+  overflow: visible !important;
+}
+
+.filter-fields__location {
+  position: relative;
+  z-index: 60;
+}
+
+#ort-suggestions {
+  z-index: 1000 !important;
+}
+
+
+/* ==========================================================================
+   03. FILTER DRAWER SCROLLBAR
+   ========================================================================== */
+
+.filter-drawer__body::-webkit-scrollbar {
+  width: 0.3125rem;
+}
+
+.filter-drawer__body::-webkit-scrollbar-track {
+  background: #F2F3EE;
+  border-radius: 0.625rem;
+}
+
+.filter-drawer__body::-webkit-scrollbar-thumb {
+  background: #B5B9AD;
+  border-radius: 0.625rem;
+}
+
+.filter-drawer__body::-webkit-scrollbar-thumb:hover {
+  background: var(--_token---text-secondary, #737969);
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  .filter-drawer__body {
+    scrollbar-width: thin;
+    scrollbar-color: #B5B9AD #F2F3EE;
+  }
+}
+
+
+/* ==========================================================================
+   04. SPECIALIZATION OPTIONS & CHECKBOXES
+   ========================================================================== */
+
+.filter-category__options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.filter-category__options .filter-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  color: var(--_token---text-heading, #373A35);
+}
+
+.filter-category__options .filter-checkbox__input {
+  appearance: none;
+  -webkit-appearance: none;
+  display: grid;
+  place-items: center;
+  width: 1.125rem;
+  height: 1.125rem;
+  min-width: 1.125rem;
+  margin: 0;
+  border: 0.0625rem solid #9DA397;
+  border-radius: 0.25rem;
+  background: var(--_token---bg-main, #FFFFFF);
+  cursor: pointer;
+}
+
+.filter-category__options
+.filter-checkbox__input:checked {
+  background: var(--_token---text-secondary, #737969);
+  border-color: var(--_token---text-secondary, #737969);
+}
+
+.filter-category__options
+.filter-checkbox__input:checked::after {
+  content: "";
+  width: 0.55rem;
+  height: 0.3rem;
+  border-left: 0.125rem solid
+    var(--_token---text-white, #FFFFFF);
+  border-bottom: 0.125rem solid
+    var(--_token---text-white, #FFFFFF);
+  transform: translateY(-0.0625rem) rotate(-45deg);
+}
+
+.filter-category__options
+.filter-checkbox__input:focus-visible {
+  outline: 0.125rem solid
+    var(--_token---text-secondary, #737969);
+  outline-offset: 0.1875rem;
+}
+
+.filter-category.is-open
+.filter-category__trigger {
+  color: var(--_token---text-secondary, #737969);
+}
+
+
+/* ==========================================================================
+   05. SEARCH AUTOCOMPLETE
+   ========================================================================== */
+
+.thema-combobox__group-label {
+  padding: 0.625rem 0.875rem 0.375rem;
+  border-top: 0.0625rem solid #DDDDD5;
+  color: var(--_token---text-secondary, #737969);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.thema-combobox__option:focus-visible {
+  background: #F2F3EE;
+  outline: 0.125rem solid
+    var(--_token---text-secondary, #737969);
+  outline-offset: -0.125rem;
+}
+
+
+/* ==========================================================================
+   06. ACTIVE FILTER TAGS
+   ========================================================================== */
+
+.active-filters__tags .card__tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 0 0 auto;
+  width: auto;
+  max-width: 100%;
+  white-space: nowrap;
+}
+
+.active-filter__remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 1rem;
+  height: 1rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 1.25rem;
+  line-height: 1;
+  transform: translateY(-0.125rem);
+  cursor: pointer;
+  opacity: 0.65;
+}
+
+.active-filter__remove:hover {
+  opacity: 1;
+}
+
+.active-filter__remove:focus-visible {
+  outline: 0.125rem solid
+    var(--_token---text-secondary, #737969);
+  outline-offset: 0.1875rem;
+  border-radius: 0.125rem;
+}
+
+
+/* ==========================================================================
+   07. FILTER DRAWER ACCORDION
+   ========================================================================== */
+
+.filter-drawer .filter-group__title-wrap {
+  cursor: pointer;
+}
+
+.filter-drawer
+.filter-group__title-wrap:focus-visible {
+  outline: 0.125rem solid
+    var(--_token---text-secondary, #737969);
+  outline-offset: 0.1875rem;
+  border-radius: 0.25rem;
+}
+
+.filter-drawer .filter-group__title-wrap
+.filter-group__chevron {
+  transition: transform 0.2s ease;
+}
+
+.filter-drawer .filter-group.is-open
+> .filter-group__title-wrap
+.filter-group__chevron {
+  transform: rotate(180deg);
+}
+
+
+/* ==========================================================================
+   08. ACTIVE FILTERS LAYOUT
+   ========================================================================== */
+
+.filter-bar__row-2 {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 3rem;
+}
+
+.filter-bar__active {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  flex: 0 1 auto;
+  width: fit-content;
+  min-width: 0;
+}
+
+.active-filters__label {
+  flex: 0 0 auto;
+}
+
+.active-filters__tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 0 1 auto;
+  width: fit-content;
+  min-width: 0;
+}
+
+.filter-clear-all {
+  flex: 0 0 auto;
+  width: auto;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.filter-sort {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+
+/* ==========================================================================
+   09. EMPTY STATE — RADIUS OPTIONS
+   ========================================================================== */
+
+.finder-empty__radius-option {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  padding: 0.5rem 1rem;
+  box-sizing: border-box;
+  border: 0.03125rem solid #D9DDD3;
+  border-radius: 0.75rem;
+  background: var(--_token---bg-main, #FFFFFF);
+  color: var(--_token---text-heading, #373A35);
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.finder-empty__radius-option:has(input:checked) {
+  border-color: var(--_token---text-secondary, #737969);
+  background: #ECEEE7;
+}
+
+/* Visually hidden accessible radio input */
+
+.finder-empty__radius-option input[type="radio"] {
+  position: absolute;
+  width: 0.0625rem;
+  height: 0.0625rem;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.finder-empty__radius-label {
+  display: block;
+  margin: 0;
+  padding: 0;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.finder-empty__radius-option:has(input:focus-visible) {
+  outline: 0.125rem solid
+    var(--_token---text-secondary, #737969);
+  outline-offset: 0.1875rem;
+}
+
+
+/* ==========================================================================
+   10. FINDER MAP — PRACTITIONER POPUP
+   ========================================================================== */
+
+
+/* 10.1. Mapbox popup container */
+
+.practitioner-map-popup.mapboxgl-popup {
+  max-width: none !important;
+  z-index: 20;
+}
+
+.practitioner-map-popup .mapboxgl-popup-content {
+  padding: 0;
+  border-radius: 1rem;
+  background: var(--_token---bg-main, #FFFFFF);
+  box-shadow: 0 0.5rem 2rem rgba(25, 35, 25, 0.12);
+  overflow: hidden;
+}
+
+.practitioner-map-popup .mapboxgl-popup-tip {
+  border-top-color: var(--_token---bg-main, #FFFFFF);
+}
+
+.practitioner-map-popup .mapboxgl-popup-close-button {
+  display: none;
+}
+
+
+/* 10.2. Practitioner card */
+
+.practitioner-popup {
+  display: flex;
+  width: 22rem;
+  min-height: 11rem;
+  font-family: inherit;
+  color: var(--_token---text-heading, #373A35);
+}
+
+
+/* 10.3. Practitioner photo */
+
+.practitioner-popup__image {
+  flex: 0 0 34%;
+  overflow: hidden;
+  background: #F2F3EE;
+}
+
+.practitioner-popup__image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+
+/* 10.4. Practitioner content */
+
+.practitioner-popup__content {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.25rem;
+}
+
+.practitioner-popup__info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+
+/* 10.5. Practitioner name */
+
+.practitioner-popup__name {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #222520;
+}
+
+
+/* 10.6. Profession and location */
+
+.practitioner-popup__profession,
+.practitioner-popup__location {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 400;
+  line-height: 1.4;
+  color: var(--_token---text-heading, #373A35);
+}
+
+
+/* 10.7. Profile link */
+
+.practitioner-map-popup .practitioner-popup__link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.5rem;
+  width: fit-content;
+  margin-top: auto;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  outline: none;
+  color: var(--_token---text-heading, #373A35);
+  font-family: inherit;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.3;
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.practitioner-map-popup .practitioner-popup__link:hover {
+  color: var(--_token---text-secondary, #737969);
+  border: none;
+  box-shadow: none;
+  outline: none;
+  text-decoration: none;
+}
+
+.practitioner-map-popup .practitioner-popup__link:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.practitioner-map-popup
+.practitioner-popup__link:focus-visible {
+  outline: 0.125rem solid
+    var(--_token---text-secondary, #737969);
+  outline-offset: 0.25rem;
+}
+
+.practitioner-map-popup .practitioner-popup__link:active {
+  color: #596554;
+  outline: none;
+  box-shadow: none;
+}
+
+
+/* 10.8. Profile link arrow */
+
+.practitioner-map-popup .practitioner-popup__arrow {
+  display: inline-block;
+  font-size: 1.25rem;
+  font-weight: 400;
+  line-height: 1;
+  transition: transform 0.2s ease;
+}
+
+.practitioner-map-popup .practitioner-popup__link:hover
+.practitioner-popup__arrow {
+  transform: translateX(0.2rem);
+}
+
+
+/* 10.9. Map popup — mobile portrait */
+
+@media (max-width: 479px) {
+
+  .practitioner-popup {
+    width: min(19rem, calc(100vw - 3rem));
+    min-height: 9rem;
+  }
+
+  .practitioner-popup__content {
+    padding: 0.875rem;
+    gap: 0.75rem;
+  }
+
+  .practitioner-popup__name {
+    font-size: 1rem;
+  }
+
+  .practitioner-popup__profession,
+  .practitioner-popup__location {
+    font-size: 0.75rem;
+  }
+
+  .practitioner-map-popup .practitioner-popup__link {
+    font-size: 0.8125rem;
+  }
+
+}
+
+
+/* ==========================================================================
+   11. MOBILE FILTER RESPONSIVE
+   Breakpoint: max-width 767px
+   ========================================================================== */
+
+@media screen and (max-width: 767px) {
+
+  /* 11.1. Results header */
+
+  .results-header {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1.5rem;
+    min-width: 0;
+  }
+
+  .results-header__count {
+    width: 100%;
+    min-width: 0;
+  }
+
+
+  /* 11.2. Main filter grid */
+
+  .filter-bar {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 0.75rem;
+    row-gap: 1rem;
+    align-items: start;
+    width: 100%;
+    min-width: 0;
+  }
+
+
+  /* 11.3. Flatten intermediate wrappers */
+
+  .filter-bar__controls,
+  .filter-bar__row-2,
+  .filter-bar__left {
+    display: contents;
+  }
+
+
+  /* 11.4. Filter fields — first row */
+
+  .filter-fields-wrap {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .filter-field {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+
+  /* 11.5. All filters button — second row, left */
+
+  .filter-all-btn {
+    grid-column: 1;
+    grid-row: 2;
+    justify-self: start;
+    align-self: center;
+    width: auto;
+    max-width: 100%;
+    min-width: 0;
+    margin: 0;
+  }
+
+
+  /* 11.6. Sort dropdown — second row, right */
+
+  .filter-sort {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: stretch;
+    align-self: center;
+    margin: 0;
+  }
+
+  .filter-sort,
+  .filter-sort__select,
+  #sort-dropdown {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+
+  /* 11.7. Active filters — third row */
+
+  .filter-bar__active {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    flex-direction: column;
+    gap: 0.5rem;
+    width: 100%;
+  }
+
+  .active-filters__label {
+    width: 100%;
+    margin: 0;
+  }
+
+  .active-filters__tags {
+    flex-direction: row;
+    justify-content: flex-start;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .active-filters__tags > * {
+    flex: 0 0 auto;
+    max-width: 100%;
+  }
+
+
+  /* 11.8. Clear all — fourth row */
+
+  .filter-clear-all {
+    grid-column: 1 / -1;
+    grid-row: 4;
+    justify-self: start;
+    align-self: start;
+    max-width: 100%;
+  }
+
+
+  /* 11.9. Overflow protection */
+
+  .results-header,
+  .filter-bar,
+  .filter-fields-wrap,
+  .filter-bar__active,
+  .active-filters__tags {
+    box-sizing: border-box;
+  }
+
+}
+
+
+/* ==========================================================================
+   12. SMALL MOBILE
+   Breakpoint: max-width 479px
+   ========================================================================== */
+
+@media screen and (max-width: 479px) {
+
+  .results-header {
+    gap: 1.25rem;
+  }
+
+  .filter-bar {
+    column-gap: 0.5rem;
+    row-gap: 0.875rem;
+  }
+
+  .filter-fields-wrap {
+    gap: 0.625rem;
+  }
+
+  .active-filters__tags {
+    gap: 0.375rem;
+  }
+
+}
+
+
+/* ==========================================================================
+   END OF FINDER CSS
+   ========================================================================== */
