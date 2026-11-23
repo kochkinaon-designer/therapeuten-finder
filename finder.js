@@ -783,434 +783,260 @@ document.addEventListener("DOMContentLoaded", function () {
 
 
 
+
 /* ==========================================================================
-   07. UNIVERSAL AUTOCOMPLETE
-   Topics, specializations, professions and practitioners.
-   Specializations use the shared Advanced Filters state.
+   07. UNIVERSAL AUTOCOMPLETE — STAGED MAIN SEARCH
+   One visible choice. Submit commits it; drawer filters stay immediate.
    ========================================================================== */
 (() => {
   "use strict";
-
   const root = document.getElementById("thema-combobox");
   const input = document.getElementById("thema-input");
   const suggestions = document.getElementById("thema-suggestions");
   const clearButton = document.getElementById("thema-clear");
-
-  if (!root || !input || !suggestions || !clearButton) return;
+  const form = document.querySelector('form[fs-list-element="filters"]');
+  if (!root || !input || !suggestions || !clearButton || !form) return;
   if (root.dataset.autocompleteReady === "true") return;
-
   root.dataset.autocompleteReady = "true";
 
-  const MAX_TERMS = 8;
-  const MAX_PRACTITIONERS = 4;
+  // Keep the visible field separate from Finsweet's live keyword filter.
+  // This input is deliberately a text input (not type=hidden), because
+  // Finsweet's keyword control needs a real input element.
+  const proxy = document.createElement("input");
+  proxy.type = "text";
+  proxy.setAttribute("fs-list-field", "keywords");
+  proxy.setAttribute("aria-hidden", "true");
+  proxy.tabIndex = -1;
+  proxy.autocomplete = "off";
+  proxy.style.cssText = "position:absolute!important;left:-9999px!important;width:1px!important;height:1px!important;opacity:0!important;pointer-events:none!important;";
+  input.removeAttribute("fs-list-field");
+  form.appendChild(proxy);
 
+  const normalize = value => String(value || "")
+    .toLocaleLowerCase("de").normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "").trim();
+  const entries = [];
+  const seen = new Set();
+  document.querySelectorAll("[data-autocomplete]").forEach(element => {
+    const type = element.dataset.autocomplete;
+    const name = element.textContent.trim();
+    if (!["thema", "fachrichtung", "spezialisierung", "practitioner"].includes(type) || !name) return;
+    const key = `${type}:${normalize(name)}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    entries.push({ type, name });
+  });
+
+  let pending = null; // null means user typed freely or restored an URL value
+  let applied = { type: "text", name: "", slug: null };
   let activeIndex = -1;
   let optionButtons = [];
 
-  const normalize = value =>
-    String(value || "")
-      .toLocaleLowerCase("de")
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .trim();
-
-  // -----------------------------------------
-  // CMS ENTRIES
-  // -----------------------------------------
-
-  function getEntries() {
-    const entries = [];
-    const seen = new Set();
-
-    document.querySelectorAll(
-      "[data-autocomplete]"
-    ).forEach(element => {
-      const type = element.dataset.autocomplete;
-      const name = element.textContent.trim();
-
-      if (![
-        "thema",
-        "fachrichtung",
-        "spezialisierung",
-        "practitioner"
-      ].includes(type)) return;
-
-      if (!name) return;
-
-      const key = `${type}:${normalize(name)}`;
-
-      if (seen.has(key)) return;
-      seen.add(key);
-
-      entries.push({ type, name });
-    });
-
-    return entries;
-  }
-
-  const entries = getEntries();
-
-  // -----------------------------------------
-  // SPECIALIZATION SLUG LOOKUP
-  // -----------------------------------------
-
-  function getSpecializationSlug(name) {
-    const normalizedName = normalize(name);
-
-    // Prefer the actual CMS-generated drawer input.
-    const inputs = document.querySelectorAll(
-      '.filter-drawer input[name="filter-specializations"]'
-    );
-
-    for (const checkbox of inputs) {
-      const label = checkbox
-        .closest(".filter-checkbox")
-        ?.querySelector(".filter-checkbox__label")
-        ?.textContent
-        ?.trim();
-
-      if (normalize(label) === normalizedName) {
-        return checkbox.value;
-      }
+  function slugFor(name) {
+    const normalized = normalize(name);
+    for (const checkbox of document.querySelectorAll('.filter-drawer input[name="filter-specializations"]')) {
+      const label = checkbox.closest(".filter-checkbox")?.querySelector(".filter-checkbox__label")?.textContent;
+      if (normalize(label) === normalized) return checkbox.value;
     }
-
-    // Fallback to CMS source data.
-    const sources = document.querySelectorAll(
-      ".specialization-source[data-spec-slug]"
-    );
-
-    for (const source of sources) {
-      if (
-        normalize(source.dataset.specName) ===
-        normalizedName
-      ) {
-        return source.dataset.specSlug?.trim() || null;
-      }
+    for (const source of document.querySelectorAll(".specialization-source[data-spec-slug]")) {
+      if (normalize(source.dataset.specName) === normalized) return source.dataset.specSlug?.trim() || null;
     }
-
     return null;
   }
 
-  // -----------------------------------------
-  // UI HELPERS
-  // -----------------------------------------
-
-  function closeSuggestions() {
+  function notify() {
+    document.dispatchEvent(new CustomEvent("finder:main-search-applied", { detail: { ...applied } }));
+  }
+  function updateClear() { clearButton.hidden = !input.value.length; }
+  function close() {
     suggestions.hidden = true;
     suggestions.replaceChildren();
-
     input.setAttribute("aria-expanded", "false");
     input.removeAttribute("aria-activedescendant");
-
     activeIndex = -1;
     optionButtons = [];
   }
-
-  function updateClearButton() {
-    clearButton.hidden = !input.value.length;
+  function writeProxy(value) {
+    if (proxy.value === value) return;
+    proxy.value = value;
+    proxy.dispatchEvent(new Event("input", { bubbles: true }));
   }
-
-  function dispatchInput() {
-    input.dispatchEvent(
-      new Event("input", { bubbles: true })
-    );
+  function setVisible(value, selection = null) {
+    input.value = value;
+    pending = selection;
+    updateClear();
+    close();
   }
-
-  // -----------------------------------------
-  // SELECT ENTRY
-  // -----------------------------------------
-
-  function selectEntry(entry) {
-    closeSuggestions();
-
-    if (entry.type === "spezialisierung") {
-      const slug = getSpecializationSlug(entry.name);
-
-      if (!slug) {
-        console.warn(
-          "Finder Autocomplete: specialization slug not found",
-          entry.name
-        );
-        return;
-      }
-
-      if (
-        typeof window.finderAdvanced?.addSpecialization !==
-        "function"
-      ) {
-        console.warn(
-          "Finder Autocomplete: Advanced Filters not ready"
-        );
-        return;
-      }
-
-      // Clear text-based search to prevent a second
-      // Finsweet text condition for this specialization.
-      input.value = "";
-      updateClearButton();
-      dispatchInput();
-
-      // Inform Active Tags that the text search
-      // is no longer applied.
-      document.dispatchEvent(
-        new CustomEvent("finder:thema-cleared")
-      );
-
-      // Add without replacing existing specializations.
-      window.finderAdvanced.addSpecialization(slug);
-
-      input.focus();
-      return;
+  function resolvePending() {
+    const name = input.value.trim();
+    if (!name) return { type: "text", name: "", slug: null };
+    if (pending && normalize(pending.name) === normalize(name)) return pending;
+    // Also recognize values restored from homepage/URL, without requiring
+    // the visitor to select the autocomplete suggestion again.
+    const match = entries.find(e => normalize(e.name) === normalize(name));
+    if (match?.type === "spezialisierung") {
+      const slug = slugFor(match.name);
+      if (slug) return { ...match, slug };
     }
+    return match || { type: "text", name, slug: null };
+  }
+  function commit() {
+    const next = resolvePending();
+    const old = applied;
+    // A replacement/clear of a main-field specialization removes ONLY
+    // that specialization, not additional drawer selections.
+    if (old.type === "spezialisierung" && old.slug &&
+        (next.type !== "spezialisierung" || next.slug !== old.slug)) {
+      window.finderAdvanced?.remove("specializations", old.slug);
+    }
+    if (next.type === "spezialisierung") {
+      const slug = next.slug || slugFor(next.name);
+      if (slug) {
+        window.finderAdvanced?.addSpecialization(slug);
+        applied = { type: "spezialisierung", name: next.name, slug };
+        writeProxy(""); // Avoid a second keyword condition.
+      } else {
+        console.warn("Finder: specialization slug not found", next.name);
+        applied = { type: "text", name: next.name, slug: null };
+        writeProxy(next.name);
+      }
+    } else {
+      applied = { type: next.type, name: next.name, slug: null };
+      writeProxy(next.name);
+    }
+    pending = applied.name ? { ...applied } : null;
+    notify();
+    close();
+  }
 
-    // Other entry types retain text search behavior.
-    input.value = entry.name;
-    updateClearButton();
-    dispatchInput();
-
+  function select(entry) {
+    const slug = entry.type === "spezialisierung" ? slugFor(entry.name) : null;
+    setVisible(entry.name, { ...entry, slug });
     input.focus();
   }
-
-  // -----------------------------------------
-  // CREATE OPTION
-  // -----------------------------------------
-
   function createOption(entry, index) {
     const button = document.createElement("button");
-
     button.type = "button";
     button.className = "thema-combobox__option";
     button.id = `thema-option-${index}`;
-
     button.setAttribute("role", "option");
     button.setAttribute("aria-selected", "false");
     button.textContent = entry.name;
-
-    button.addEventListener("pointerdown", event => {
-      event.preventDefault();
-    });
-
-    button.addEventListener("click", () => {
-      selectEntry(entry);
-    });
-
+    button.addEventListener("pointerdown", event => event.preventDefault());
+    button.addEventListener("click", () => select(entry));
     return button;
   }
-
   function setActive(index) {
     if (!optionButtons.length) return;
-
-    activeIndex =
-      (index + optionButtons.length) %
-      optionButtons.length;
-
+    activeIndex = (index + optionButtons.length) % optionButtons.length;
     optionButtons.forEach((button, i) => {
-      const active = i === activeIndex;
-
-      button.classList.toggle("is-active", active);
-      button.setAttribute(
-        "aria-selected",
-        String(active)
-      );
+      button.classList.toggle("is-active", i === activeIndex);
+      button.setAttribute("aria-selected", String(i === activeIndex));
     });
-
-    const activeButton = optionButtons[activeIndex];
-
-    input.setAttribute(
-      "aria-activedescendant",
-      activeButton.id
-    );
-
-    activeButton.scrollIntoView({
-      block: "nearest"
-    });
+    const button = optionButtons[activeIndex];
+    input.setAttribute("aria-activedescendant", button.id);
+    button.scrollIntoView({ block: "nearest" });
   }
-
-  // -----------------------------------------
-  // GROUP HEADING
-  // -----------------------------------------
-
-  function createGroupHeading(label) {
-    const heading = document.createElement("div");
-
-    heading.className = "thema-combobox__group-label";
-    heading.textContent = label;
-    heading.setAttribute("role", "presentation");
-
-    // Inline styling so no additional CSS is required.
-    heading.style.padding = "12px 14px 7px";
-    heading.style.marginTop = "6px";
-    heading.style.borderTop =
-      "1px solid rgba(115, 121, 105, 0.22)";
-    heading.style.color = "#737969";
-    heading.style.fontSize = "13px";
-    heading.style.fontWeight = "600";
-    heading.style.lineHeight = "1.4";
-
-    return heading;
+  function heading(label) {
+    const element = document.createElement("div");
+    element.className = "thema-combobox__group-label";
+    element.textContent = label;
+    element.setAttribute("role", "presentation");
+    element.style.cssText = "padding:12px 14px 7px;margin-top:6px;border-top:1px solid rgba(115,121,105,.22);color:#737969;font-size:13px;font-weight:600;line-height:1.4;";
+    return element;
   }
-
-  // -----------------------------------------
-  // RENDER SUGGESTIONS
-  // -----------------------------------------
-
   function renderSuggestions() {
     const query = normalize(input.value);
-
-    updateClearButton();
-
-    if (query.length < 2) {
-      closeSuggestions();
-      return;
-    }
-
-    const matches = entries.filter(entry =>
-      normalize(entry.name).includes(query)
-    );
-
-    const terms = matches
-      .filter(entry => entry.type !== "practitioner")
+    updateClear();
+    if (query.length < 2) return close();
+    const matches = entries.filter(entry => normalize(entry.name).includes(query));
+    const terms = matches.filter(entry => entry.type !== "practitioner")
       .sort((a, b) => {
-        const aStarts =
-          normalize(a.name).startsWith(query);
-
-        const bStarts =
-          normalize(b.name).startsWith(query);
-
-        if (aStarts !== bStarts) {
-          return aStarts ? -1 : 1;
-        }
-
-        return a.name.localeCompare(b.name, "de");
-      })
-      .slice(0, MAX_TERMS);
-
-    const practitioners = matches
-      .filter(entry => entry.type === "practitioner")
-      .slice(0, MAX_PRACTITIONERS);
-
+        const aStarts = normalize(a.name).startsWith(query);
+        const bStarts = normalize(b.name).startsWith(query);
+        return aStarts !== bStarts ? (aStarts ? -1 : 1) : a.name.localeCompare(b.name, "de");
+      }).slice(0, 8);
+    const practitioners = matches.filter(entry => entry.type === "practitioner").slice(0, 4);
     suggestions.replaceChildren();
     optionButtons = [];
     activeIndex = -1;
-
     if (!terms.length && !practitioners.length) {
       const empty = document.createElement("div");
-
       empty.className = "thema-combobox__empty";
       empty.textContent = "Keine Vorschläge gefunden";
-
       suggestions.appendChild(empty);
-      suggestions.hidden = false;
-
-      input.setAttribute("aria-expanded", "true");
-      return;
-    }
-
-    terms.forEach(entry => {
-      const button = createOption(
-        entry,
-        optionButtons.length
-      );
-
-      optionButtons.push(button);
-      suggestions.appendChild(button);
-    });
-
-    if (practitioners.length) {
-      suggestions.appendChild(
-        createGroupHeading("Therapeut:innen")
-      );
-
-      practitioners.forEach(entry => {
-        const button = createOption(
-          entry,
-          optionButtons.length
-        );
-
+    } else {
+      terms.forEach(entry => {
+        const button = createOption(entry, optionButtons.length);
         optionButtons.push(button);
         suggestions.appendChild(button);
       });
+      if (practitioners.length) {
+        suggestions.appendChild(heading("Therapeut:innen"));
+        practitioners.forEach(entry => {
+          const button = createOption(entry, optionButtons.length);
+          optionButtons.push(button);
+          suggestions.appendChild(button);
+        });
+      }
     }
-
     suggestions.hidden = false;
     input.setAttribute("aria-expanded", "true");
   }
 
-  // -----------------------------------------
-  // EVENTS
-  // -----------------------------------------
-
-  input.addEventListener("input", renderSuggestions);
-
-  input.addEventListener("focus", () => {
-    if (input.value.trim().length >= 2) {
-      renderSuggestions();
-    }
+  input.addEventListener("input", () => {
+    pending = null;
+    renderSuggestions(); // No Finsweet event until submit.
   });
-
+  input.addEventListener("focus", () => {
+    if (input.value.trim().length >= 2) renderSuggestions();
+  });
   input.addEventListener("keydown", event => {
     if (suggestions.hidden) return;
-
-    if (event.key === "ArrowDown") {
-      if (!optionButtons.length) return;
-
-      event.preventDefault();
-      setActive(activeIndex + 1);
-    }
-
-    if (event.key === "ArrowUp") {
-      if (!optionButtons.length) return;
-
-      event.preventDefault();
-
-      setActive(
-        activeIndex < 0
-          ? optionButtons.length - 1
-          : activeIndex - 1
-      );
-    }
-
-    if (
-      event.key === "Enter" &&
-      activeIndex >= 0
-    ) {
-      event.preventDefault();
-      optionButtons[activeIndex]?.click();
-    }
-
-    if (event.key === "Escape") {
-      event.preventDefault();
-      closeSuggestions();
+    if (event.key === "ArrowDown" && optionButtons.length) {
+      event.preventDefault(); setActive(activeIndex + 1);
+    } else if (event.key === "ArrowUp" && optionButtons.length) {
+      event.preventDefault(); setActive(activeIndex < 0 ? optionButtons.length - 1 : activeIndex - 1);
+    } else if (event.key === "Enter" && activeIndex >= 0) {
+      event.preventDefault(); optionButtons[activeIndex]?.click();
+    } else if (event.key === "Escape") {
+      event.preventDefault(); close();
     }
   });
-
   clearButton.addEventListener("click", () => {
-    input.value = "";
-    updateClearButton();
-    closeSuggestions();
-    dispatchInput();
-
+    setVisible(""); // Pending clear; applied filters remain unchanged.
     input.focus();
   });
-
   document.addEventListener("pointerdown", event => {
-    if (!root.contains(event.target)) {
-      closeSuggestions();
-    }
+    if (!root.contains(event.target)) close();
   });
 
-  input.closest("form")?.addEventListener(
-    "submit",
-    closeSuggestions
-  );
+  // Capture phase: commit before Geo and Finsweet handle form submission.
+  form.addEventListener("submit", commit, true);
 
-  updateClearButton();
+  // Drawer/chip removal is an immediate applied-filter action.
+  document.addEventListener("finder:advanced-filters-changed", () => {
+    if (applied.type !== "spezialisierung" || !applied.slug) return;
+    const values = window.finderAdvanced?.getApplied()?.specializations || [];
+    if (values.includes(applied.slug)) return;
+    const old = applied;
+    applied = { type: "text", name: "", slug: null };
+    if (normalize(input.value) === normalize(old.name)) setVisible("");
+    notify();
+  });
 
-  console.log(
-    "Finder Autocomplete: ready",
-    entries.length,
-    "CMS entries"
-  );
+  window.finderMainSearch = {
+    getApplied: () => ({ ...applied }),
+    clear() {
+      applied = { type: "text", name: "", slug: null };
+      setVisible("");
+      writeProxy("");
+      notify();
+    }
+  };
+  root.querySelector(".thema-combobox__chevron")?.remove();
+  updateClear();
+  console.log("Finder Autocomplete: staged search ready", entries.length);
 })();
 
 
@@ -1218,65 +1044,21 @@ document.addEventListener("DOMContentLoaded", function () {
 
 /* ==========================================================================
    08. CLEAR ALL — MAIN FINDER
-   Reset search, location, radius and quick filters
+   Reset every filter; Drawer Clear (block 13) remains independent.
    ========================================================================== */
 (() => {
   "use strict";
-
   const clearAll = document.getElementById("btn-clear-all");
-  const form = document.querySelector(
-    'form[fs-list-element="filters"]'
-  );
-
+  const form = document.querySelector('form[fs-list-element="filters"]');
   if (!clearAll || !form) return;
-
   clearAll.addEventListener("click", event => {
     event.preventDefault();
-
-    // Clear Thema
-    const thema = document.getElementById("thema-input");
-
-    if (thema) {
-      thema.value = "";
-      thema.dispatchEvent(
-        new Event("input", { bubbles: true })
-      );
-    }
-
-    // Clear Mapbox location
+    window.finderMainSearch?.clear();
+    window.finderAdvanced?.clear();
     window.finderLocation?.clear();
-
-    // Clear applied Geo Filter
-    window.finderGeo?.clear();
-
-    // Clear Radius Dropdown UI
     window.finderRadius?.clear();
-
-    // Clear quick filter checkboxes
-    [
-      "#beratungsform-dropdown",
-      "#versicherung-dropdown"
-    ].forEach(selector => {
-      document.querySelectorAll(
-        `${selector} input[type="checkbox"]`
-      ).forEach(checkbox => {
-        checkbox.checked = false;
-        checkbox.dispatchEvent(
-          new Event("change", { bubbles: true })
-        );
-      });
-    });
-
-    // Reapply form-based Finsweet filters
-    if (form.requestSubmit) {
-      form.requestSubmit();
-    }
-
-    // Remove active tags
-    document.querySelector(
-      ".active-filters__tags"
-    )?.replaceChildren();
-
+    window.finderGeo?.clear();
+    form.requestSubmit();
     console.log("Finder: all filters cleared");
   });
 })();
@@ -1284,310 +1066,100 @@ document.addEventListener("DOMContentLoaded", function () {
 
 
 
+
 /* ==========================================================================
    09. ACTIVE FILTER TAGS
-   Render and remove applied filter chips.
-   Specializations are owned by finderAdvanced.
+   Main field is staged; tags reflect only applied filters.
    ========================================================================== */
 (() => {
   "use strict";
-
-  const container = document.querySelector(
-    ".active-filters__tags"
-  );
-
-  const activeBar = document.querySelector(
-    ".filter-bar__active"
-  );
-
-  const form = document.querySelector(
-    'form[fs-list-element="filters"]'
-  );
-
+  const container = document.querySelector(".active-filters__tags");
+  const activeBar = document.querySelector(".filter-bar__active");
+  const form = document.querySelector('form[fs-list-element="filters"]');
+  const drawer = document.querySelector(".filter-drawer");
   if (!container || !form) return;
 
-  const themaInput = document.getElementById("thema-input");
-  const drawer = document.querySelector(".filter-drawer");
-
-  let appliedThema = "";
-  let suppressSubmitSync = false;
-
+  // URL synchronization (block 20) uses this API.
   window.finderThema = {
     getApplied() {
-      return appliedThema;
+      const search = window.finderMainSearch?.getApplied();
+      return search?.type === "spezialisierung" ? "" : (search?.name || "");
     }
   };
-
   const labels = {
-    consultation: {
-      online: "Online",
-      onsite: "Vor Ort"
-    },
-    insurance: {
-      public: "Gesetzlich",
-      private: "Privat",
-      selfpay: "Selbstzahler"
-    },
-    ages: {
-      adults: "Erwachsene",
-      teenagers: "Jugendliche",
-      children: "Kinder"
-    }
+    consultation: { online: "Online", onsite: "Vor Ort" },
+    insurance: { public: "Gesetzlich", private: "Privat", selfpay: "Selbstzahler" },
+    ages: { adults: "Erwachsene", teenagers: "Jugendliche", children: "Kinder" }
   };
-
-  // -----------------------------------------
-  // HELPERS
-  // -----------------------------------------
-
-  function refreshSearch() {
-    suppressSubmitSync = true;
-
-    try {
-      form.requestSubmit();
-    } finally {
-      suppressSubmitSync = false;
-    }
-
-    queueMicrotask(render);
-  }
-
-  function createTag(label, onRemove) {
-    const tag = document.createElement("div");
-    tag.className = "card__tag";
-
+  function tag(label, onRemove) {
+    const element = document.createElement("div");
+    element.className = "card__tag";
     const text = document.createElement("span");
     text.textContent = label;
-
     const remove = document.createElement("button");
-
     remove.type = "button";
     remove.className = "active-filter__remove";
-
-    remove.setAttribute(
-      "aria-label",
-      `Filter ${label} entfernen`
-    );
-
+    remove.setAttribute("aria-label", `Filter ${label} entfernen`);
     remove.textContent = "×";
-
     remove.addEventListener("click", event => {
-      event.preventDefault();
-      event.stopPropagation();
-      onRemove();
+      event.preventDefault(); event.stopPropagation(); onRemove();
     });
-
-    tag.append(text, remove);
-    return tag;
+    element.append(text, remove);
+    return element;
   }
-
-  // -----------------------------------------
-  // REMOVE FILTERS
-  // -----------------------------------------
-
-  function removeThema() {
-    appliedThema = "";
-
-    if (themaInput) {
-      themaInput.value = "";
-
-      themaInput.dispatchEvent(
-        new Event("input", { bubbles: true })
-      );
-    }
-
-    refreshSearch();
+  function languageLabel(slug) {
+    const el = [...(drawer?.querySelectorAll("[data-language]") || [])]
+      .find(node => node.dataset.language === slug);
+    return el?.textContent.trim() || slug;
   }
-
+  function specializationLabel(slug) {
+    const input = [...(drawer?.querySelectorAll('input[name="filter-specializations"]') || [])]
+      .find(node => node.value === slug);
+    return input?.closest(".filter-checkbox")?.querySelector(".filter-checkbox__label")?.textContent.trim() || slug;
+  }
+  function removeMainText() {
+    window.finderMainSearch?.clear();
+    // Clear through form so the existing Finsweet submit flow remains intact.
+    form.requestSubmit();
+  }
   function removeLocation() {
     window.finderLocation?.clear();
     window.finderGeo?.clear();
-    refreshSearch();
+    form.requestSubmit();
   }
-
   function removeRadius() {
     window.finderRadius?.set("all");
     window.finderGeo?.apply();
     render();
   }
-
-  function removeAdvanced(group, value) {
-    window.finderAdvanced?.remove(group, value);
-    render();
-  }
-
-  // -----------------------------------------
-  // LABELS
-  // -----------------------------------------
-
-  function getLanguageLabel(slug) {
-    if (!drawer) return slug;
-
-    const element = [
-      ...drawer.querySelectorAll("[data-language]")
-    ].find(el => el.dataset.language === slug);
-
-    return element?.textContent.trim() || slug;
-  }
-
-  function getSpecializationLabel(slug) {
-    if (!drawer) return slug;
-
-    const input = [
-      ...drawer.querySelectorAll(
-        'input[name="filter-specializations"]'
-      )
-    ].find(el => el.value === slug);
-
-    return input
-      ?.closest(".filter-checkbox")
-      ?.querySelector(".filter-checkbox__label")
-      ?.textContent.trim() || slug;
-  }
-
-  // -----------------------------------------
-  // RENDER TAGS
-  // -----------------------------------------
-
   function render() {
     container.replaceChildren();
-
-    const advanced =
-      window.finderAdvanced?.getApplied();
-
-    // TEXT SEARCH
-    // Specializations are not rendered here.
-    // They are rendered exclusively from Advanced Filters.
-    if (appliedThema) {
-      container.appendChild(
-        createTag(appliedThema, removeThema)
-      );
-    }
-
-    // GEO
+    const text = window.finderThema.getApplied();
+    if (text) container.appendChild(tag(text, removeMainText));
     const geo = window.finderGeo?.getApplied();
-
     if (geo?.location) {
-      container.appendChild(
-        createTag(
-          geo.location.label || "Standort",
-          removeLocation
-        )
-      );
-
-      if (
-        geo.radius !== Infinity &&
-        Number.isFinite(geo.radius)
-      ) {
-        container.appendChild(
-          createTag(
-            `${geo.radius} km`,
-            removeRadius
-          )
-        );
+      container.appendChild(tag(geo.location.label || "Standort", removeLocation));
+      if (geo.radius !== Infinity && Number.isFinite(geo.radius)) {
+        container.appendChild(tag(`${geo.radius} km`, removeRadius));
       }
     }
-
-    // ADVANCED FILTERS
-    if (advanced) {
-      Object.entries(advanced).forEach(
-        ([group, values]) => {
-
-          // Prevent duplicate chips within each group.
-          const uniqueValues = [
-            ...new Set(values)
-          ];
-
-          uniqueValues.forEach(value => {
-            let label;
-
-            if (group === "languages") {
-              label = getLanguageLabel(value);
-            } else if (group === "specializations") {
-              label = getSpecializationLabel(value);
-            } else {
-              label = labels[group]?.[value] || value;
-            }
-
-            container.appendChild(
-              createTag(
-                label,
-                () => removeAdvanced(group, value)
-              )
-            );
-          });
-        }
-      );
-    }
-
-    // SHOW / HIDE ACTIVE FILTERS
-    if (activeBar) {
-      activeBar.style.display =
-        container.childElementCount > 0
-          ? ""
-          : "none";
-    }
-  }
-
-  // -----------------------------------------
-  // MAIN FORM SUBMIT
-  // -----------------------------------------
-
-  form.addEventListener("submit", () => {
-    if (!suppressSubmitSync) {
-      appliedThema =
-        themaInput?.value.trim() || "";
-    }
-
-    queueMicrotask(render);
-  });
-
-  // -----------------------------------------
-  // SPECIALIZATION SELECTED VIA AUTOCOMPLETE
-  // -----------------------------------------
-
-  document.addEventListener(
-    "finder:thema-cleared",
-    () => {
-      appliedThema = "";
-      queueMicrotask(render);
-    }
-  );
-
-  // -----------------------------------------
-  // FILTER EVENTS
-  // -----------------------------------------
-
-  [
-    "finder:beratungsform-changed",
-    "finder:versicherung-changed",
-    "finder:advanced-filters-changed",
-    "finder:geo-cleared",
-    "finder:location-changed",
-    "finder:radius-changed"
-  ].forEach(eventName => {
-    document.addEventListener(
-      eventName,
-      render
-    );
-  });
-
-  // -----------------------------------------
-  // MAIN CLEAR ALL
-  // -----------------------------------------
-
-  document.getElementById("btn-clear-all")
-    ?.addEventListener("click", () => {
-      appliedThema = "";
-
-      // The main Clear All resets every filter.
-      // Drawer Clear remains independent in block 13.
-      window.finderAdvanced?.clear();
-
-      queueMicrotask(render);
+    const advanced = window.finderAdvanced?.getApplied();
+    if (advanced) Object.entries(advanced).forEach(([group, values]) => {
+      [...new Set(values)].forEach(value => {
+        const label = group === "languages" ? languageLabel(value)
+          : group === "specializations" ? specializationLabel(value)
+          : (labels[group]?.[value] || value);
+        container.appendChild(tag(label, () => window.finderAdvanced?.remove(group, value)));
+      });
     });
-
+    if (activeBar) activeBar.style.display = container.childElementCount ? "" : "none";
+  }
+  ["finder:main-search-applied", "finder:advanced-filters-changed",
+   "finder:beratungsform-changed", "finder:versicherung-changed",
+   "finder:geo-applied", "finder:geo-cleared", "finder:location-changed",
+   "finder:radius-changed"].forEach(name => document.addEventListener(name, render));
+  form.addEventListener("submit", () => queueMicrotask(render));
   render();
-
   console.log("Finder Active Filters: ready");
 })();
 
@@ -4135,10 +3707,12 @@ document.addEventListener("DOMContentLoaded", function () {
   // LISTEN TO APPLIED FILTER CHANGES
   // -----------------------------------------
 
+  
   [
     "finder:advanced-filters-changed",
     "finder:geo-applied",
-    "finder:geo-cleared"
+    "finder:geo-cleared",
+    "finder:main-search-applied"
   ].forEach(eventName => {
     document.addEventListener(
       eventName,
@@ -4146,13 +3720,6 @@ document.addEventListener("DOMContentLoaded", function () {
     );
   });
 
-  form.addEventListener(
-    "submit",
-    scheduleSync
-  );
-
-  document.getElementById("btn-clear-all")
-    ?.addEventListener("click", scheduleSync);
 
   // -----------------------------------------
   // WAIT FOR INITIAL URL RESTORATION
