@@ -3744,3 +3744,52 @@ document.addEventListener("DOMContentLoaded", function () {
   ]);
 })();
 
+
+
+
+/* ==========================================================================
+   21. INITIAL RESULTS VISIBILITY
+   Prevent flash of unfiltered practitioner cards
+   ========================================================================== */
+(() => {
+  "use strict";
+
+  const html = document.documentElement;
+
+  if (!html.classList.contains("finder-initializing")) {
+    return;
+  }
+
+  let finished = false;
+
+  function revealResults() {
+    if (finished) return;
+
+    finished = true;
+
+    html.classList.remove("finder-initializing");
+
+    console.log("Finder: initial results revealed");
+  }
+
+  // Safety fallback: never leave results hidden indefinitely.
+  const fallback = setTimeout(revealResults, 5000);
+
+  (window.FinsweetAttributes ||= []).push([
+    "list",
+    ([list]) => {
+      if (!list) return;
+
+      // Wait for the initial URL restoration and the next
+      // browser rendering cycle.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          clearTimeout(fallback);
+          revealResults();
+        });
+      });
+    }
+  ]);
+})();
+
+
