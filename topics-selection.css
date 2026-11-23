@@ -135,5 +135,93 @@
 
 
 /* ==========================================================================
+   07. HOMEPAGE — SEARCH AUTOCOMPLETE
+   Consistent with Finder visual styling
+   ========================================================================== */
+
+.search-form .thema-combobox {
+  position: relative;
+  min-width: 0;
+}
+
+.search-form .thema-combobox__suggestions {
+  position: absolute;
+  top: calc(100% + 0.375rem);
+  left: 0;
+  right: 0;
+  z-index: 1000;
+
+  max-height: 20rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+
+  padding: 0.375rem;
+  border: 0.0625rem solid #DDDDD5;
+  border-radius: 0.75rem;
+  background: var(--_token---bg-main, #FFFFFF);
+  box-shadow: 0 0.5rem 1.5rem rgba(25, 35, 25, 0.1);
+}
+
+.search-form .thema-combobox__suggestions[hidden] {
+  display: none !important;
+}
+
+.search-form .thema-combobox__option {
+  display: block;
+  width: 100%;
+  padding: 0.75rem 0.875rem;
+
+  border: 0;
+  border-radius: 0.375rem;
+  background: transparent;
+
+  color: var(--_token---text-heading, #373A35);
+  font: inherit;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  text-align: left;
+
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.search-form .thema-combobox__option:hover,
+.search-form .thema-combobox__option.is-active {
+  background: #F2F3EE;
+}
+
+.search-form .thema-combobox__option:focus-visible {
+  background: #F2F3EE;
+  outline: 0.125rem solid
+    var(--_token---text-secondary, #737969);
+  outline-offset: -0.125rem;
+}
+
+.search-form .thema-combobox__group-label {
+  margin-top: 0.375rem;
+  padding: 0.625rem 0.875rem 0.375rem;
+  border-top: 0.0625rem solid #DDDDD5;
+
+  color: var(--_token---text-secondary, #737969);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.search-form .thema-combobox__empty {
+  padding: 0.875rem;
+  color: var(--_token---text-secondary, #737969);
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+@media (max-width: 479px) {
+  .search-form .thema-combobox__suggestions {
+    max-height: min(18rem, 45vh);
+  }
+}
+
+/* ==========================================================================
    END OF TOPICS SELECTION CSS
    ========================================================================== */
