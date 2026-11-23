@@ -782,9 +782,11 @@ document.addEventListener("DOMContentLoaded", function () {
 })();
 
 
+
 /* ==========================================================================
    07. UNIVERSAL AUTOCOMPLETE
-   Search terms, specializations, professions and practitioners
+   Topics, specializations, professions and practitioners.
+   Specializations use the shared Advanced Filters state.
    ========================================================================== */
 (() => {
   "use strict";
@@ -812,7 +814,10 @@ document.addEventListener("DOMContentLoaded", function () {
       .replace(/[\u0300-\u036f]/g, "")
       .trim();
 
-  // Read autocomplete entries from CMS
+  // -----------------------------------------
+  // CMS ENTRIES
+  // -----------------------------------------
+
   function getEntries() {
     const entries = [];
     const seen = new Set();
@@ -843,13 +848,57 @@ document.addEventListener("DOMContentLoaded", function () {
     return entries;
   }
 
-  // Keep the autocomplete dictionary independent
-  // of Finsweet's changing result list
   const entries = getEntries();
+
+  // -----------------------------------------
+  // SPECIALIZATION SLUG LOOKUP
+  // -----------------------------------------
+
+  function getSpecializationSlug(name) {
+    const normalizedName = normalize(name);
+
+    // Prefer the actual CMS-generated drawer input.
+    const inputs = document.querySelectorAll(
+      '.filter-drawer input[name="filter-specializations"]'
+    );
+
+    for (const checkbox of inputs) {
+      const label = checkbox
+        .closest(".filter-checkbox")
+        ?.querySelector(".filter-checkbox__label")
+        ?.textContent
+        ?.trim();
+
+      if (normalize(label) === normalizedName) {
+        return checkbox.value;
+      }
+    }
+
+    // Fallback to CMS source data.
+    const sources = document.querySelectorAll(
+      ".specialization-source[data-spec-slug]"
+    );
+
+    for (const source of sources) {
+      if (
+        normalize(source.dataset.specName) ===
+        normalizedName
+      ) {
+        return source.dataset.specSlug?.trim() || null;
+      }
+    }
+
+    return null;
+  }
+
+  // -----------------------------------------
+  // UI HELPERS
+  // -----------------------------------------
 
   function closeSuggestions() {
     suggestions.hidden = true;
     suggestions.replaceChildren();
+
     input.setAttribute("aria-expanded", "false");
     input.removeAttribute("aria-activedescendant");
 
@@ -861,17 +910,70 @@ document.addEventListener("DOMContentLoaded", function () {
     clearButton.hidden = !input.value.length;
   }
 
+  function dispatchInput() {
+    input.dispatchEvent(
+      new Event("input", { bubbles: true })
+    );
+  }
+
+  // -----------------------------------------
+  // SELECT ENTRY
+  // -----------------------------------------
+
   function selectEntry(entry) {
-    input.value = entry.name;
-    updateClearButton();
     closeSuggestions();
 
-    input.dispatchEvent(new Event("input", {
-      bubbles: true
-    }));
+    if (entry.type === "spezialisierung") {
+      const slug = getSpecializationSlug(entry.name);
+
+      if (!slug) {
+        console.warn(
+          "Finder Autocomplete: specialization slug not found",
+          entry.name
+        );
+        return;
+      }
+
+      if (
+        typeof window.finderAdvanced?.addSpecialization !==
+        "function"
+      ) {
+        console.warn(
+          "Finder Autocomplete: Advanced Filters not ready"
+        );
+        return;
+      }
+
+      // Clear text-based search to prevent a second
+      // Finsweet text condition for this specialization.
+      input.value = "";
+      updateClearButton();
+      dispatchInput();
+
+      // Inform Active Tags that the text search
+      // is no longer applied.
+      document.dispatchEvent(
+        new CustomEvent("finder:thema-cleared")
+      );
+
+      // Add without replacing existing specializations.
+      window.finderAdvanced.addSpecialization(slug);
+
+      input.focus();
+      return;
+    }
+
+    // Other entry types retain text search behavior.
+    input.value = entry.name;
+    updateClearButton();
+    dispatchInput();
 
     input.focus();
   }
+
+  // -----------------------------------------
+  // CREATE OPTION
+  // -----------------------------------------
 
   function createOption(entry, index) {
     const button = document.createElement("button");
@@ -879,6 +981,7 @@ document.addEventListener("DOMContentLoaded", function () {
     button.type = "button";
     button.className = "thema-combobox__option";
     button.id = `thema-option-${index}`;
+
     button.setAttribute("role", "option");
     button.setAttribute("aria-selected", "false");
     button.textContent = entry.name;
@@ -923,6 +1026,34 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
+  // -----------------------------------------
+  // GROUP HEADING
+  // -----------------------------------------
+
+  function createGroupHeading(label) {
+    const heading = document.createElement("div");
+
+    heading.className = "thema-combobox__group-label";
+    heading.textContent = label;
+    heading.setAttribute("role", "presentation");
+
+    // Inline styling so no additional CSS is required.
+    heading.style.padding = "12px 14px 7px";
+    heading.style.marginTop = "6px";
+    heading.style.borderTop =
+      "1px solid rgba(115, 121, 105, 0.22)";
+    heading.style.color = "#737969";
+    heading.style.fontSize = "13px";
+    heading.style.fontWeight = "600";
+    heading.style.lineHeight = "1.4";
+
+    return heading;
+  }
+
+  // -----------------------------------------
+  // RENDER SUGGESTIONS
+  // -----------------------------------------
+
   function renderSuggestions() {
     const query = normalize(input.value);
 
@@ -940,8 +1071,11 @@ document.addEventListener("DOMContentLoaded", function () {
     const terms = matches
       .filter(entry => entry.type !== "practitioner")
       .sort((a, b) => {
-        const aStarts = normalize(a.name).startsWith(query);
-        const bStarts = normalize(b.name).startsWith(query);
+        const aStarts =
+          normalize(a.name).startsWith(query);
+
+        const bStarts =
+          normalize(b.name).startsWith(query);
 
         if (aStarts !== bStarts) {
           return aStarts ? -1 : 1;
@@ -961,11 +1095,13 @@ document.addEventListener("DOMContentLoaded", function () {
 
     if (!terms.length && !practitioners.length) {
       const empty = document.createElement("div");
+
       empty.className = "thema-combobox__empty";
       empty.textContent = "Keine Vorschläge gefunden";
 
       suggestions.appendChild(empty);
       suggestions.hidden = false;
+
       input.setAttribute("aria-expanded", "true");
       return;
     }
@@ -981,12 +1117,9 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     if (practitioners.length) {
-      const heading = document.createElement("div");
-
-      heading.className = "thema-combobox__group-label";
-      heading.textContent = "Therapeut:innen";
-
-      suggestions.appendChild(heading);
+      suggestions.appendChild(
+        createGroupHeading("Therapeut:innen")
+      );
 
       practitioners.forEach(entry => {
         const button = createOption(
@@ -1002,6 +1135,10 @@ document.addEventListener("DOMContentLoaded", function () {
     suggestions.hidden = false;
     input.setAttribute("aria-expanded", "true");
   }
+
+  // -----------------------------------------
+  // EVENTS
+  // -----------------------------------------
 
   input.addEventListener("input", renderSuggestions);
 
@@ -1025,6 +1162,7 @@ document.addEventListener("DOMContentLoaded", function () {
       if (!optionButtons.length) return;
 
       event.preventDefault();
+
       setActive(
         activeIndex < 0
           ? optionButtons.length - 1
@@ -1032,7 +1170,10 @@ document.addEventListener("DOMContentLoaded", function () {
       );
     }
 
-    if (event.key === "Enter" && activeIndex >= 0) {
+    if (
+      event.key === "Enter" &&
+      activeIndex >= 0
+    ) {
       event.preventDefault();
       optionButtons[activeIndex]?.click();
     }
@@ -1047,10 +1188,7 @@ document.addEventListener("DOMContentLoaded", function () {
     input.value = "";
     updateClearButton();
     closeSuggestions();
-
-    input.dispatchEvent(new Event("input", {
-      bubbles: true
-    }));
+    dispatchInput();
 
     input.focus();
   });
@@ -1061,7 +1199,6 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   });
 
-  // Hide suggestions when the search is submitted
   input.closest("form")?.addEventListener(
     "submit",
     closeSuggestions
@@ -1075,6 +1212,7 @@ document.addEventListener("DOMContentLoaded", function () {
     "CMS entries"
   );
 })();
+
 
 
 
@@ -1145,9 +1283,11 @@ document.addEventListener("DOMContentLoaded", function () {
 
 
 
+
 /* ==========================================================================
    09. ACTIVE FILTER TAGS
-   Render and remove active filter chips
+   Render and remove applied filter chips.
+   Specializations are owned by finderAdvanced.
    ========================================================================== */
 (() => {
   "use strict";
@@ -1177,7 +1317,7 @@ document.addEventListener("DOMContentLoaded", function () {
       return appliedThema;
     }
   };
-   
+
   const labels = {
     consultation: {
       online: "Online",
@@ -1194,6 +1334,10 @@ document.addEventListener("DOMContentLoaded", function () {
       children: "Kinder"
     }
   };
+
+  // -----------------------------------------
+  // HELPERS
+  // -----------------------------------------
 
   function refreshSearch() {
     suppressSubmitSync = true;
@@ -1215,12 +1359,15 @@ document.addEventListener("DOMContentLoaded", function () {
     text.textContent = label;
 
     const remove = document.createElement("button");
+
     remove.type = "button";
     remove.className = "active-filter__remove";
+
     remove.setAttribute(
       "aria-label",
       `Filter ${label} entfernen`
     );
+
     remove.textContent = "×";
 
     remove.addEventListener("click", event => {
@@ -1233,11 +1380,16 @@ document.addEventListener("DOMContentLoaded", function () {
     return tag;
   }
 
+  // -----------------------------------------
+  // REMOVE FILTERS
+  // -----------------------------------------
+
   function removeThema() {
     appliedThema = "";
 
     if (themaInput) {
       themaInput.value = "";
+
       themaInput.dispatchEvent(
         new Event("input", { bubbles: true })
       );
@@ -1262,6 +1414,10 @@ document.addEventListener("DOMContentLoaded", function () {
     window.finderAdvanced?.remove(group, value);
     render();
   }
+
+  // -----------------------------------------
+  // LABELS
+  // -----------------------------------------
 
   function getLanguageLabel(slug) {
     if (!drawer) return slug;
@@ -1288,10 +1444,19 @@ document.addEventListener("DOMContentLoaded", function () {
       ?.textContent.trim() || slug;
   }
 
+  // -----------------------------------------
+  // RENDER TAGS
+  // -----------------------------------------
+
   function render() {
     container.replaceChildren();
 
-    // THEMA
+    const advanced =
+      window.finderAdvanced?.getApplied();
+
+    // TEXT SEARCH
+    // Specializations are not rendered here.
+    // They are rendered exclusively from Advanced Filters.
     if (appliedThema) {
       container.appendChild(
         createTag(appliedThema, removeThema)
@@ -1323,13 +1488,16 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     // ADVANCED FILTERS
-    const advanced =
-      window.finderAdvanced?.getApplied();
-
     if (advanced) {
       Object.entries(advanced).forEach(
         ([group, values]) => {
-          values.forEach(value => {
+
+          // Prevent duplicate chips within each group.
+          const uniqueValues = [
+            ...new Set(values)
+          ];
+
+          uniqueValues.forEach(value => {
             let label;
 
             if (group === "languages") {
@@ -1351,8 +1519,7 @@ document.addEventListener("DOMContentLoaded", function () {
       );
     }
 
-    // SHOW / HIDE ACTIVE FILTERS BLOCK
-    // Sorting remains visible in filter-bar__row-2.
+    // SHOW / HIDE ACTIVE FILTERS
     if (activeBar) {
       activeBar.style.display =
         container.childElementCount > 0
@@ -1361,16 +1528,35 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
 
+  // -----------------------------------------
   // MAIN FORM SUBMIT
+  // -----------------------------------------
+
   form.addEventListener("submit", () => {
     if (!suppressSubmitSync) {
-      appliedThema = themaInput?.value.trim() || "";
+      appliedThema =
+        themaInput?.value.trim() || "";
     }
 
     queueMicrotask(render);
   });
 
+  // -----------------------------------------
+  // SPECIALIZATION SELECTED VIA AUTOCOMPLETE
+  // -----------------------------------------
+
+  document.addEventListener(
+    "finder:thema-cleared",
+    () => {
+      appliedThema = "";
+      queueMicrotask(render);
+    }
+  );
+
+  // -----------------------------------------
   // FILTER EVENTS
+  // -----------------------------------------
+
   [
     "finder:beratungsform-changed",
     "finder:versicherung-changed",
@@ -1379,14 +1565,24 @@ document.addEventListener("DOMContentLoaded", function () {
     "finder:location-changed",
     "finder:radius-changed"
   ].forEach(eventName => {
-    document.addEventListener(eventName, render);
+    document.addEventListener(
+      eventName,
+      render
+    );
   });
 
+  // -----------------------------------------
   // MAIN CLEAR ALL
+  // -----------------------------------------
+
   document.getElementById("btn-clear-all")
     ?.addEventListener("click", () => {
       appliedThema = "";
+
+      // The main Clear All resets every filter.
+      // Drawer Clear remains independent in block 13.
       window.finderAdvanced?.clear();
+
       queueMicrotask(render);
     });
 
@@ -1394,6 +1590,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   console.log("Finder Active Filters: ready");
 })();
+
 
 
 
@@ -1653,13 +1850,11 @@ document.addEventListener("DOMContentLoaded", function () {
 
 
 
+
 /* ==========================================================================
    12. FINDER ADVANCED FILTERS
-   Consultation type, insurance, age groups, languages and specializations.
-   Synchronizes Quick Filters with Drawer and applies Finsweet filtering.
-   Restores advanced filters from URL.
-   Applies drawer filters immediately on checkbox change.
-   Provides window.finderAdvanced public API.
+   Shared state for Drawer, Quick Filters and Autocomplete.
+   OR within groups, AND between groups.
    ========================================================================== */
 (() => {
   "use strict";
@@ -1708,9 +1903,7 @@ document.addEventListener("DOMContentLoaded", function () {
   const drawer = document.querySelector(DRAWER);
 
   if (!drawer) {
-    console.warn(
-      "Finder Advanced Filters: drawer missing"
-    );
+    console.warn("Finder Advanced: drawer missing");
     return;
   }
 
@@ -1719,7 +1912,10 @@ document.addEventListener("DOMContentLoaded", function () {
   // -----------------------------------------
 
   function unique(values) {
-    return [...new Set(values.filter(Boolean))];
+    return [...new Set(
+      values.map(value => String(value || "").trim())
+        .filter(Boolean)
+    )];
   }
 
   function getQuickValues(group) {
@@ -1739,12 +1935,8 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function getDrawerValues(group) {
-    const mapping = DRAWER_GROUPS[group];
-
-    return Object.entries(mapping)
-      .filter(([, name]) => {
-        return getDrawerInput(name)?.checked;
-      })
+    return Object.entries(DRAWER_GROUPS[group])
+      .filter(([, name]) => getDrawerInput(name)?.checked)
       .map(([value]) => value);
   }
 
@@ -1761,8 +1953,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
       return wrapper
         ?.querySelector("[data-language]")
-        ?.dataset.language
-        ?.trim();
+        ?.dataset.language;
     }));
   }
 
@@ -1779,7 +1970,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
     input.checked = checked;
 
-    // Keep Webflow custom checkbox appearance in sync.
     const wrapper =
       input.closest(".w-checkbox") ||
       input.closest("label");
@@ -1822,6 +2012,16 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
+  function setSpecializationCheckboxes(values) {
+    const selected = new Set(values);
+
+    drawer.querySelectorAll(
+      'input[name="filter-specializations"]'
+    ).forEach(input => {
+      setCheckbox(input, selected.has(input.value));
+    });
+  }
+
   function refresh() {
     listInstance?.triggerHook("filter");
   }
@@ -1838,16 +2038,6 @@ document.addEventListener("DOMContentLoaded", function () {
     );
   }
 
-  function notifyAdvanced() {
-    document.dispatchEvent(
-      new CustomEvent("finder:advanced-filters-changed", {
-        detail: {
-          filters: getApplied()
-        }
-      })
-    );
-  }
-
   function getApplied() {
     return {
       consultation: [...applied.consultation],
@@ -1856,6 +2046,14 @@ document.addEventListener("DOMContentLoaded", function () {
       languages: [...applied.languages],
       specializations: [...applied.specializations]
     };
+  }
+
+  function notifyAdvanced() {
+    document.dispatchEvent(
+      new CustomEvent("finder:advanced-filters-changed", {
+        detail: { filters: getApplied() }
+      })
+    );
   }
 
   // -----------------------------------------
@@ -1929,8 +2127,7 @@ document.addEventListener("DOMContentLoaded", function () {
     applied.ages =
       getDrawerValues("ages");
 
-    applied.languages =
-      getLanguages();
+    applied.languages = getLanguages();
 
     applied.specializations =
       getSpecializations();
@@ -1948,13 +2145,7 @@ document.addEventListener("DOMContentLoaded", function () {
     notify("consultation");
     notify("insurance");
     notifyAdvanced();
-
     refresh();
-
-    console.log(
-      "Finder Advanced Filters: applied",
-      getApplied()
-    );
   }
 
   // -----------------------------------------
@@ -1967,13 +2158,7 @@ document.addEventListener("DOMContentLoaded", function () {
         const dropdown =
           document.querySelector(config.selector);
 
-        if (!dropdown) {
-          console.warn(
-            "Finder Advanced Filters: missing",
-            config.selector
-          );
-          return;
-        }
+        if (!dropdown) return;
 
         dropdown.addEventListener(
           "change",
@@ -1999,7 +2184,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   // -----------------------------------------
-  // RESTORE ADVANCED FILTERS FROM URL
+  // RESTORE FROM URL
   // -----------------------------------------
 
   function restoreFromURL() {
@@ -2011,38 +2196,21 @@ document.addEventListener("DOMContentLoaded", function () {
       return unique(
         (params.get(group) || "")
           .split(",")
-          .map(value => value.trim())
-          .filter(Boolean)
       );
     }
 
-    // Restore consultation, insurance and ages.
     Object.keys(DRAWER_GROUPS).forEach(group => {
       if (params.has(group)) {
-        setDrawerValues(
-          group,
-          read(group)
-        );
+        setDrawerValues(group, read(group));
       }
     });
 
-    // Restore specializations.
     if (params.has("specializations")) {
-      const selected = new Set(
+      setSpecializationCheckboxes(
         read("specializations")
       );
-
-      drawer.querySelectorAll(
-        'input[name="filter-specializations"]'
-      ).forEach(input => {
-        setCheckbox(
-          input,
-          selected.has(input.value)
-        );
-      });
     }
 
-    // Restore languages.
     if (params.has("languages")) {
       const selected = new Set(
         read("languages")
@@ -2062,41 +2230,27 @@ document.addEventListener("DOMContentLoaded", function () {
           ?.trim();
 
         if (slug) {
-          setCheckbox(
-            input,
-            selected.has(slug)
-          );
+          setCheckbox(input, selected.has(slug));
         }
       });
     }
 
-    // Synchronize all restored filters.
     applyDrawer();
   }
 
   // -----------------------------------------
-  // SET SPECIALIZATIONS
-  // Used by Topics Popup and external scripts.
+  // SPECIALIZATIONS API
   // -----------------------------------------
 
+  // Replace all selected specializations.
+  // Retained for Topics Popup and external scripts.
   function setSpecializations(values = []) {
     if (!Array.isArray(values)) return;
 
-    const selected = new Set(
-      unique(values)
-    );
+    const selected = unique(values);
 
-    drawer.querySelectorAll(
-      'input[name="filter-specializations"]'
-    ).forEach(input => {
-      setCheckbox(
-        input,
-        selected.has(input.value)
-      );
-    });
+    setSpecializationCheckboxes(selected);
 
-    // Update only specializations.
-    // Preserve all other applied filters.
     applied.specializations =
       getSpecializations();
 
@@ -2104,8 +2258,48 @@ document.addEventListener("DOMContentLoaded", function () {
     refresh();
   }
 
+  // Add one specialization without replacing others.
+  function addSpecialization(slug) {
+    slug = String(slug || "").trim();
+
+    if (!slug) return false;
+
+    const input = [
+      ...drawer.querySelectorAll(
+        'input[name="filter-specializations"]'
+      )
+    ].find(checkbox => checkbox.value === slug);
+
+    if (!input) {
+      console.warn(
+        "Finder Advanced: specialization not found",
+        slug
+      );
+      return false;
+    }
+
+    // Already selected: do not create duplicates.
+    if (applied.specializations.includes(slug)) {
+      setCheckbox(input, true);
+      return true;
+    }
+
+    const next = unique([
+      ...applied.specializations,
+      slug
+    ]);
+
+    setSpecializationCheckboxes(next);
+    applied.specializations = next;
+
+    notifyAdvanced();
+    refresh();
+
+    return true;
+  }
+
   // -----------------------------------------
-  // PUBLIC API
+  // REMOVE FILTER
   // -----------------------------------------
 
   function remove(group, value) {
@@ -2114,8 +2308,10 @@ document.addEventListener("DOMContentLoaded", function () {
     applied[group] = applied[group]
       .filter(item => item !== value);
 
-    if (group === "consultation" ||
-        group === "insurance") {
+    if (
+      group === "consultation" ||
+      group === "insurance"
+    ) {
       setQuickValues(group, applied[group]);
       setDrawerValues(group, applied[group]);
       notify(group);
@@ -2126,13 +2322,9 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     if (group === "specializations") {
-      drawer.querySelectorAll(
-        'input[name="filter-specializations"]'
-      ).forEach(input => {
-        if (input.value === value) {
-          setCheckbox(input, false);
-        }
-      });
+      setSpecializationCheckboxes(
+        applied.specializations
+      );
     }
 
     if (group === "languages") {
@@ -2159,6 +2351,10 @@ document.addEventListener("DOMContentLoaded", function () {
     refresh();
   }
 
+  // -----------------------------------------
+  // CLEAR ADVANCED FILTERS ONLY
+  // -----------------------------------------
+
   function clear() {
     Object.keys(applied).forEach(group => {
       applied[group] = [];
@@ -2173,11 +2369,7 @@ document.addEventListener("DOMContentLoaded", function () {
       setDrawerValues(group, []);
     });
 
-    drawer.querySelectorAll(
-      'input[name="filter-specializations"]'
-    ).forEach(input => {
-      setCheckbox(input, false);
-    });
+    setSpecializationCheckboxes([]);
 
     drawer.querySelectorAll(
       'input[type="checkbox"]'
@@ -2196,10 +2388,15 @@ document.addEventListener("DOMContentLoaded", function () {
     refresh();
   }
 
+  // -----------------------------------------
+  // PUBLIC API
+  // -----------------------------------------
+
   window.finderAdvanced = {
     getApplied,
     apply: applyDrawer,
     setSpecializations,
+    addSpecialization,
     remove,
     clear
   };
@@ -2218,7 +2415,6 @@ document.addEventListener("DOMContentLoaded", function () {
     applied.insurance =
       getQuickValues("insurance");
 
-    // Preserve specializations preselected from URL.
     applied.specializations =
       getSpecializations();
 
@@ -2232,12 +2428,10 @@ document.addEventListener("DOMContentLoaded", function () {
       applied.insurance
     );
 
-    // Restore advanced filters from URL.
     restoreFromURL();
-
     bindQuickFilters();
 
-    // Apply drawer filters immediately on checkbox change.
+    // Changes in Drawer apply immediately.
     drawer.addEventListener("change", event => {
       if (!event.target.matches(
         'input[type="checkbox"]'
