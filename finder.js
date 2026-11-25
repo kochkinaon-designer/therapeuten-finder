@@ -979,18 +979,41 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function setQuickValues(group, values) {
-    const config = QUICK_GROUPS[group];
-    const selected = new Set(values);
 
-    document.querySelectorAll(
-      `${config.selector} input[type="checkbox"]`
-    ).forEach(input => {
-      setCheckbox(
-        input,
-        selected.has(input.value)
-      );
-    });
+  // Synchronize Beratungsform component
+  if (
+    group === "consultation" &&
+    window.finderBeratungsform
+  ) {
+    window.finderBeratungsform.set(values);
+    return;
   }
+
+  // Synchronize Versicherung component
+  if (
+    group === "insurance" &&
+    window.finderVersicherung
+  ) {
+    window.finderVersicherung.set(values);
+    return;
+  }
+
+  // Fallback if component API is unavailable
+  const config = QUICK_GROUPS[group];
+
+  if (!config) return;
+
+  const selected = new Set(values);
+
+  document.querySelectorAll(
+    `${config.selector} input[type="checkbox"]`
+  ).forEach(input => {
+    setCheckbox(
+      input,
+      selected.has(input.value)
+    );
+  });
+}
 
   function setSpecializationCheckboxes(values) {
     const selected = new Set(values);
