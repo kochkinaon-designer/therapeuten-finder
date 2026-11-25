@@ -393,7 +393,8 @@
 
   const isFinder =
   window.location.pathname.replace(/\/+$/, "") ===
-  "/find-a-practitioner";
+  "/find-a-practitioner" ||
+  Boolean(document.getElementById("finder-city-config"));
 
   if (
     !root ||
@@ -1081,8 +1082,9 @@
   // Finder and future City Pages use Finsweet filters.
 
   const isFinder =
-    window.location.pathname.replace(/\/+$/, "") ===
-    "/find-a-practitioner";
+  window.location.pathname.replace(/\/+$/, "") ===
+  "/find-a-practitioner" ||
+  Boolean(document.getElementById("finder-city-config"));
 
   if (!form || isFinder) return;
 
