@@ -655,8 +655,7 @@
     if (next.type === "spezialisierung") {
       const slug = next.slug || slugFor(next.name);
 
-      if (slug) {
-        window.finderAdvanced?.addSpecialization(slug);
+      if (slug && window.finderAdvanced?.addSpecialization(slug)) {
 
         applied = {
           type: "spezialisierung",
