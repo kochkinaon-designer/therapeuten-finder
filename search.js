@@ -391,7 +391,9 @@
     'form[fs-list-element="filters"]'
   );
 
-  const isFinder = Boolean(form);
+  const isFinder =
+  window.location.pathname.replace(/\/+$/, "") ===
+  "/find-a-practitioner";
 
   if (
     !root ||
@@ -1078,12 +1080,11 @@
   // Homepage only.
   // Finder and future City Pages use Finsweet filters.
 
-  if (
-    !form ||
-    document.querySelector(
-      'form[fs-list-element="filters"]'
-    )
-  ) return;
+  const isFinder =
+    window.location.pathname.replace(/\/+$/, "") ===
+    "/find-a-practitioner";
+
+  if (!form || isFinder) return;
 
   if (form.dataset.homeSearchReady === "true") return;
 
