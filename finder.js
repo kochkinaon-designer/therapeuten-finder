@@ -3154,14 +3154,40 @@ document.addEventListener("DOMContentLoaded", function () {
       );
     }
 
-    // 04. Update browser URL
-    if (url.href !== window.location.href) {
-      window.history.replaceState(
-        window.history.state,
-        "",
-        url.href
-      );
-    }
+    // 04. City Page redirect
+const city = window.finderCity;
+
+if (city && geo?.location) {
+  const location = geo.location;
+
+  const distanceFromCity =
+    window.finderUtils.distanceKm(
+      city.lat,
+      city.lng,
+      location.lat,
+      location.lng
+    );
+
+  const isDifferentLocation =
+    distanceFromCity > 1;
+
+  if (isDifferentLocation) {
+    url.pathname = "/find-a-practitioner";
+    url.hash = "";
+
+    window.location.assign(url.href);
+    return;
+  }
+}
+
+// 05. Update browser URL
+if (url.href !== window.location.href) {
+  window.history.replaceState(
+    window.history.state,
+    "",
+    url.href
+  );
+}
   }
 
   // -----------------------------------------
