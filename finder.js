@@ -79,10 +79,44 @@
   });
 })();
 
+
+
 /* ============================================================
-   01 — TOPICS SWIPER in topics-selection.js
-   Category slider initialization and active slide behavior
+   01 — CITY PAGE CONFIGURATION
+   CMS city data, coordinates and default search radius
    ============================================================ */
+
+(() => {
+  "use strict";
+
+  const config = document.getElementById("finder-city-config");
+
+  if (!config) return;
+
+  const name = config.dataset.cityName?.trim();
+
+  const coordinates = window.finderUtils.parseCoordinates(
+    config.dataset.cityLat,
+    config.dataset.cityLng
+  );
+
+  const radius = Number(config.dataset.cityRadius) || 100;
+
+  if (!name || !coordinates) {
+    console.warn("Finder City: invalid CMS configuration");
+    return;
+  }
+
+  window.finderCity = Object.freeze({
+    name,
+    lat: coordinates.lat,
+    lng: coordinates.lng,
+    radius
+  });
+
+  console.log("Finder City: ready", window.finderCity);
+})();
+
 
 /* ============================================================
    02 — MARQUEE CARDS
@@ -2876,7 +2910,9 @@ document.addEventListener("DOMContentLoaded", function () {
     "radius"
   ].some(key => params.has(key));
 
-  if (!hasSearchParams) return;
+  const city = window.finderCity;
+
+  if (!hasSearchParams && !city) return;
 
   const form = document.querySelector(
     'form[fs-list-element="filters"]'
@@ -2925,9 +2961,14 @@ document.addEventListener("DOMContentLoaded", function () {
     // 02. RESTORE LOCATION
     // -----------------------------------------
 
-    const locationLabel = params.get("location");
-    const latValue = params.get("lat");
-    const lngValue = params.get("lng");
+    const locationLabel =
+      city?.name ?? params.get("location");
+
+    const latValue =
+      city ? String(city.lat) : params.get("lat");
+
+    const lngValue =
+      city ? String(city.lng) : params.get("lng");
 
     const lat = Number(latValue);
     const lng = Number(lngValue);
@@ -2956,7 +2997,9 @@ document.addEventListener("DOMContentLoaded", function () {
     // 03. RESTORE RADIUS
     // -----------------------------------------
 
-    const radius = params.get("radius");
+    const radius =
+     params.get("radius") ??
+     (city ? String(city.radius) : null);
 
     if (radius !== null) {
       if (radius === "all") {
