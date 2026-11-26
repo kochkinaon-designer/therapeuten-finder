@@ -488,25 +488,62 @@ document.addEventListener("DOMContentLoaded", function () {
 
 /* ==========================================================================
    08. CLEAR ALL — MAIN FINDER
-   Reset every filter; Drawer Clear (block 13) remains independent.
+   Reset all filters; restore CMS city defaults on City Pages.
+   Drawer Clear (block 13) remains independent.
    ========================================================================== */
+
 (() => {
   "use strict";
+
   const clearAll = document.getElementById("btn-clear-all");
-  const form = document.querySelector('form[fs-list-element="filters"]');
+
+  const form = document.querySelector(
+    'form[fs-list-element="filters"]'
+  );
+
   if (!clearAll || !form) return;
+
   clearAll.addEventListener("click", event => {
     event.preventDefault();
+
+    const city = window.finderCity;
+
+    // Clear main search and advanced filters.
     window.finderMainSearch?.clear();
     window.finderAdvanced?.clear();
-    window.finderLocation?.clear();
-    window.finderRadius?.clear();
-    window.finderGeo?.clear();
+
+    if (city) {
+
+      // Restore the initial CMS city.
+      window.finderLocation?.set({
+        name: city.name,
+        label: city.name,
+        lat: city.lat,
+        lng: city.lng
+      });
+
+      // Restore the default city radius.
+      window.finderRadius?.set(city.radius);
+
+    } else {
+
+      // General Finder: clear geographic filters.
+      window.finderLocation?.clear();
+      window.finderRadius?.clear();
+      window.finderGeo?.clear();
+
+    }
+
+    // Apply the final filter state.
     form.requestSubmit();
-    console.log("Finder: all filters cleared");
+
+    console.log(
+      city
+        ? "Finder City: default filters restored"
+        : "Finder: all filters cleared"
+    );
   });
 })();
-
 
 
 /* ==========================================================================
@@ -3154,41 +3191,43 @@ document.addEventListener("DOMContentLoaded", function () {
       );
     }
 
-    // 04. City Page redirect
-const city = window.finderCity;
+        // 04. City Page redirect
+    const city = window.finderCity;
 
-if (city && geo?.location) {
-  const location = geo.location;
+    if (city) {
 
-  const distanceFromCity =
-    window.finderUtils.distanceKm(
-      city.lat,
-      city.lng,
-      location.lat,
-      location.lng
-    );
+      const location = geo?.location;
 
-  const isDifferentLocation =
-    distanceFromCity > 1;
+      const isLocationRemoved = !location;
 
-  if (isDifferentLocation) {
-    url.pathname = "/find-a-practitioner";
-    url.hash = "";
+      const isDifferentLocation = location
+        ? window.finderUtils.distanceKm(
+            city.lat,
+            city.lng,
+            location.lat,
+            location.lng
+          ) > 1
+        : false;
 
-    window.location.assign(url.href);
-    return;
-  }
-}
+      if (isLocationRemoved || isDifferentLocation) {
 
-// 05. Update browser URL
-if (url.href !== window.location.href) {
-  window.history.replaceState(
-    window.history.state,
-    "",
-    url.href
-  );
-}
-  }
+        url.pathname = "/find-a-practitioner";
+        url.hash = "";
+
+        window.location.assign(url.href);
+        return;
+
+      }
+    }
+
+    // 05. Update browser URL
+    if (url.href !== window.location.href) {
+      window.history.replaceState(
+        window.history.state,
+        "",
+        url.href
+      );
+    }
 
   // -----------------------------------------
   // BATCH SYNCHRONIZATION
