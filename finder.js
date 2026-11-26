@@ -118,32 +118,229 @@
 })();
 
 
-/* ============================================================
-   02 — MARQUEE CARDS
-   Responsive card heights and infinite marquee duplication
-   ============================================================ */
+/* ==========================================================================
+   02. MARQUEE CARDS
+   City-based filtering, distance sorting,
+   responsive card heights and infinite animation.
+   ========================================================================== */
 
-(function () {
-  var isMobile = window.innerWidth <= 767;
-  var heights = isMobile
-    ? ['19.25rem', '16.5rem', '16.5rem', '13.75rem']
-    : ['24.5rem', '21rem', '21rem', '17.5rem'];
+(() => {
+  "use strict";
 
-  document.querySelectorAll('.marquee__track').forEach(function (track) {
-    var inner = track.querySelector('.w-dyn-items') || track;
-    var items = Array.from(inner.children);
+  const city = window.finderCity;
+  const { parseCoordinates, distanceKm } = window.finderUtils;
 
-    items.forEach(function (item, i) {
-      var card = item.querySelector('.doc-preview-card');
-      if (card) card.style.height = heights[i % 4];
+  document.querySelectorAll(".marquee__track").forEach(track => {
+
+    if (track.dataset.marqueeInitialized === "true") return;
+
+    track.dataset.marqueeInitialized = "true";
+
+    const inner = track.querySelector(".w-dyn-items") || track;
+    const marquee = track.closest(".marquee");
+    const section = track.closest("[data-city-network]");
+
+    let items = Array.from(inner.children).filter(item =>
+      item.matches(".w-dyn-item")
+    );
+
+    // -----------------------------------------
+    // 01. FILTER AND SORT CITY PRACTITIONERS
+    // -----------------------------------------
+
+    if (city && section) {
+
+      const matchingItems = items.map(item => {
+
+        const card = item.querySelector(
+          '[data-marquee-practitioner="true"]'
+        );
+
+        if (!card) return null;
+
+        const coordinates = parseCoordinates(
+          card.dataset.lat,
+          card.dataset.lng
+        );
+
+        if (!coordinates) return null;
+
+        const distance = distanceKm(
+          city.lat,
+          city.lng,
+          coordinates.lat,
+          coordinates.lng
+        );
+
+        return {
+          item,
+          distance
+        };
+
+      })
+      .filter(entry => entry && entry.distance <= city.radius)
+      .sort((a, b) => a.distance - b.distance);
+
+      items = matchingItems.map(entry => entry.item);
+
+      // Keep only matching practitioners.
+      inner.replaceChildren(...items);
+
+      console.log("Finder City Marquee:", {
+        city: city.name,
+        radius: city.radius,
+        practitioners: items.length
+      });
+
+      // Hide the entire network section if empty.
+      if (!items.length) {
+        section.hidden = true;
+        section.style.display = "none";
+        return;
+      }
+
+    }
+
+    if (!items.length) return;
+
+    // -----------------------------------------
+    // 02. RESPONSIVE CARD HEIGHTS
+    // -----------------------------------------
+
+    function setCardHeights() {
+
+      const isMobile = window.innerWidth <= 767;
+
+      const heights = isMobile
+        ? ["19.25rem", "16.5rem", "16.5rem", "13.75rem"]
+        : ["24.5rem", "21rem", "21rem", "17.5rem"];
+
+      items.forEach((item, index) => {
+
+        const card = item.querySelector(
+          ".doc-preview__card, .doc-preview-card"
+        );
+
+        if (card) {
+          card.style.height = heights[index % 4];
+        }
+
+      });
+
+    }
+
+    // -----------------------------------------
+    // 03. REMOVE PREVIOUS CLONES
+    // -----------------------------------------
+
+    function removeClones() {
+
+      inner.querySelectorAll(
+        ':scope > [data-marquee-clone="true"]'
+      ).forEach(clone => clone.remove());
+
+    }
+
+    // -----------------------------------------
+    // 04. CREATE ANIMATION CLONES
+    // -----------------------------------------
+
+    function createClones() {
+
+      items.forEach(item => {
+
+        const clone = item.cloneNode(true);
+
+        clone.dataset.marqueeClone = "true";
+        clone.setAttribute("aria-hidden", "true");
+
+        clone.querySelectorAll(
+          "a, button, input, select, textarea, [tabindex]"
+        ).forEach(element => {
+          element.setAttribute("tabindex", "-1");
+        });
+
+        inner.appendChild(clone);
+
+      });
+
+    }
+
+    // -----------------------------------------
+    // 05. STATIC OR ANIMATED MODE
+    // -----------------------------------------
+
+    function updateMarquee() {
+
+      removeClones();
+
+      track.classList.remove("is--static");
+      track.classList.remove("is--animated");
+
+      setCardHeights();
+
+      const viewportWidth =
+        marquee?.clientWidth || window.innerWidth;
+
+      const first = items[0].getBoundingClientRect();
+
+      const last =
+        items[items.length - 1].getBoundingClientRect();
+
+      const contentWidth = last.right - first.left;
+
+      // City Page: disable animation if cards fit.
+      if (city && section && contentWidth <= viewportWidth) {
+
+        track.classList.add("is--static");
+        return;
+
+      }
+
+      createClones();
+
+      const firstClone = inner.querySelector(
+        ':scope > [data-marquee-clone="true"]'
+      );
+
+      if (firstClone) {
+
+        const distance =
+          firstClone.getBoundingClientRect().left -
+          items[0].getBoundingClientRect().left;
+
+        track.style.setProperty(
+          "--marquee-distance",
+          `${distance}px`
+        );
+
+      }
+
+      track.classList.add("is--animated");
+
+    }
+
+    // -----------------------------------------
+    // 06. INITIALIZATION AND RESIZE
+    // -----------------------------------------
+
+    updateMarquee();
+
+    let resizeTimer;
+
+    window.addEventListener("resize", () => {
+
+      clearTimeout(resizeTimer);
+
+      resizeTimer = setTimeout(
+        updateMarquee,
+        150
+      );
+
     });
 
-    items.forEach(function (item) {
-      var clone = item.cloneNode(true);
-      clone.setAttribute('aria-hidden', 'true');
-      inner.appendChild(clone);
-    });
   });
+
 })();
 
 
