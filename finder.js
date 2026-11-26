@@ -3228,7 +3228,7 @@ document.addEventListener("DOMContentLoaded", function () {
         url.href
       );
     }
-
+  }
   // -----------------------------------------
   // BATCH SYNCHRONIZATION
   // -----------------------------------------
