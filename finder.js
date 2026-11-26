@@ -194,12 +194,12 @@
         practitioners: items.length
       });
 
-      // Hide the entire network section if empty.
-      if (!items.length) {
-        section.hidden = true;
-        section.style.display = "none";
-        return;
-      }
+      // Show the network section only with at least 4 practitioners.
+     if (items.length < 4) {
+       section.hidden = true;
+       section.style.display = "none";
+       return;
+    }
 
     }
 
