@@ -136,7 +136,9 @@
 
     track.dataset.marqueeInitialized = "true";
 
-    const inner = track.querySelector(".w-dyn-items") || track;
+    const inner = track.matches(".w-dyn-items")
+      ? track
+      : track.querySelector(":scope > .w-dyn-items") || track;
     const marquee = track.closest(".marquee");
     const section = track.closest("[data-city-network]");
 
